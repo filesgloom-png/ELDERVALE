@@ -51,6 +51,39 @@ const ULTIMATE_DATA := {
 	"Aegis Smith": {"name": "Adamant Bastion", "power": 1.18, "radius": 220.0, "heal": 20}
 }
 
+const PASSIVE_DATA := {
+	"Warden": {"name": "Unbroken Guard", "attack": 1, "skill": 1, "crit": 0, "armor": 3, "heal": 0, "charge": 1, "combo": 0, "ultimate": 1, "evade": 0.04, "damage_reduce": 0.04},
+	"Weaponmaster": {"name": "Perfect Form", "attack": 1.1, "skill": 1.02, "crit": 0.02, "armor": 0, "heal": 0, "charge": 2, "combo": 0.04, "ultimate": 1.05, "evade": 0, "damage_reduce": 0},
+	"Champion": {"name": "Victory Rush", "attack": 1.04, "skill": 1.08, "crit": 0, "armor": 1, "heal": 2, "charge": 1, "combo": 0.05, "ultimate": 1.08, "evade": 0, "damage_reduce": 0},
+	"Reaver": {"name": "Rending Strikes", "attack": 1.12, "skill": 1.02, "crit": 0.02, "armor": 0, "heal": 0, "charge": 1, "combo": 0.04, "ultimate": 1.06, "evade": 0, "damage_reduce": 0},
+	"Bloodfury": {"name": "Blood Price", "attack": 1.16, "skill": 1.08, "crit": 0, "armor": 0, "heal": 2, "charge": 2, "combo": 0.06, "ultimate": 1.1, "evade": 0, "damage_reduce": 0.02},
+	"Juggernaut": {"name": "Iron Momentum", "attack": 1.03, "skill": 1.1, "crit": 0, "armor": 4, "heal": 0, "charge": 1, "combo": 0, "ultimate": 1.05, "evade": 0, "damage_reduce": 0.06},
+	"Shadow": {"name": "Killer's Instinct", "attack": 1.05, "skill": 1.06, "crit": 0.08, "armor": 0, "heal": 0, "charge": 2, "combo": 0.03, "ultimate": 1.1, "evade": 0.04, "damage_reduce": 0},
+	"Executioner": {"name": "Merciless", "attack": 1.06, "skill": 1.1, "crit": 0.03, "armor": 0, "heal": 0, "charge": 2, "combo": 0.03, "ultimate": 1.12, "evade": 0, "damage_reduce": 0},
+	"Phantom": {"name": "Afterimage", "attack": 1.04, "skill": 1.12, "crit": 0.02, "armor": 0, "heal": 0, "charge": 3, "combo": 0.04, "ultimate": 1.06, "evade": 0.08, "damage_reduce": 0},
+	"Pathfinder": {"name": "Longshot", "attack": 1.05, "skill": 1.08, "crit": 0.02, "armor": 0, "heal": 0, "charge": 2, "combo": 0.02, "ultimate": 1.05, "evade": 0.02, "damage_reduce": 0},
+	"Beastmaster": {"name": "Pack Bond", "attack": 1.04, "skill": 1.08, "crit": 0, "armor": 1, "heal": 3, "charge": 2, "combo": 0.02, "ultimate": 1.06, "evade": 0, "damage_reduce": 0},
+	"Deadeye": {"name": "Marked Target", "attack": 1.1, "skill": 1.14, "crit": 0.1, "armor": 0, "heal": 0, "charge": 2, "combo": 0.02, "ultimate": 1.12, "evade": 0, "damage_reduce": 0},
+	"Elementalist": {"name": "Elemental Surge", "attack": 1, "skill": 1.16, "crit": 0.03, "armor": 0, "heal": 0, "charge": 3, "combo": 0.02, "ultimate": 1.12, "evade": 0, "damage_reduce": 0},
+	"Spellblade": {"name": "Arcane Edge", "attack": 1.1, "skill": 1.1, "crit": 0.03, "armor": 0, "heal": 1, "charge": 2, "combo": 0.03, "ultimate": 1.08, "evade": 0, "damage_reduce": 0},
+	"Archmage": {"name": "Overwhelming Force", "attack": 1, "skill": 1.2, "crit": 0.04, "armor": 0, "heal": 0, "charge": 4, "combo": 0, "ultimate": 1.16, "evade": 0, "damage_reduce": 0},
+	"Lich": {"name": "Soul Siphon", "attack": 1.02, "skill": 1.12, "crit": 0.02, "armor": 0, "heal": 4, "charge": 2, "combo": 0.02, "ultimate": 1.08, "evade": 0, "damage_reduce": 0},
+	"Soulweaver": {"name": "Shared Essence", "attack": 1, "skill": 1.04, "crit": 0, "armor": 1, "heal": 8, "charge": 2, "combo": 0, "ultimate": 1.04, "evade": 0, "damage_reduce": 0.02},
+	"Gravecaller": {"name": "Grave Harvest", "attack": 1.02, "skill": 1.14, "crit": 0.02, "armor": 0, "heal": 2, "charge": 3, "combo": 0.02, "ultimate": 1.1, "evade": 0, "damage_reduce": 0},
+	"Inquisitor": {"name": "Ashen Judgment", "attack": 1.1, "skill": 1.1, "crit": 0.03, "armor": 1, "heal": 1, "charge": 2, "combo": 0.03, "ultimate": 1.08, "evade": 0, "damage_reduce": 0},
+	"Justicar": {"name": "Sanctuary Oath", "attack": 1, "skill": 1.03, "crit": 0, "armor": 4, "heal": 6, "charge": 1, "combo": 0, "ultimate": 1.04, "evade": 0, "damage_reduce": 0.06},
+	"Sunkeeper": {"name": "Solar Renewal", "attack": 1.04, "skill": 1.12, "crit": 0.03, "armor": 1, "heal": 4, "charge": 2, "combo": 0.02, "ultimate": 1.1, "evade": 0, "damage_reduce": 0.02},
+	"Shapebinder": {"name": "Adaptive Hide", "attack": 1.06, "skill": 1.08, "crit": 0, "armor": 2, "heal": 2, "charge": 2, "combo": 0.02, "ultimate": 1.06, "evade": 0, "damage_reduce": 0.03},
+	"Stormcaller": {"name": "Rolling Thunder", "attack": 1.02, "skill": 1.14, "crit": 0.06, "armor": 0, "heal": 0, "charge": 4, "combo": 0.03, "ultimate": 1.12, "evade": 0, "damage_reduce": 0},
+	"Grovekeeper": {"name": "Verdant Heart", "attack": 1, "skill": 1.05, "crit": 0, "armor": 2, "heal": 7, "charge": 1, "combo": 0, "ultimate": 1.03, "evade": 0, "damage_reduce": 0.04},
+	"Way of the Fist": {"name": "Flowing Strikes", "attack": 1.12, "skill": 1.06, "crit": 0.04, "armor": 0, "heal": 0, "charge": 3, "combo": 0.07, "ultimate": 1.08, "evade": 0.02, "damage_reduce": 0},
+	"Way of the Gale": {"name": "Windstep", "attack": 1.04, "skill": 1.08, "crit": 0.05, "armor": 0, "heal": 0, "charge": 3, "combo": 0.03, "ultimate": 1.05, "evade": 0.1, "damage_reduce": 0},
+	"Way of Balance": {"name": "Centered Spirit", "attack": 1.04, "skill": 1.05, "crit": 0.02, "armor": 2, "heal": 3, "charge": 2, "combo": 0.02, "ultimate": 1.06, "evade": 0.02, "damage_reduce": 0.03},
+	"Tinkerer": {"name": "Combat Protocol", "attack": 1.05, "skill": 1.1, "crit": 0.02, "armor": 1, "heal": 0, "charge": 3, "combo": 0.03, "ultimate": 1.08, "evade": 0, "damage_reduce": 0},
+	"Artillerist": {"name": "Siege Calibration", "attack": 1.04, "skill": 1.18, "crit": 0.04, "armor": 0, "heal": 0, "charge": 4, "combo": 0.02, "ultimate": 1.14, "evade": 0, "damage_reduce": 0},
+	"Aegis Smith": {"name": "Living Bulwark", "attack": 1, "skill": 1.04, "crit": 0, "armor": 3, "heal": 5, "charge": 1, "combo": 0, "ultimate": 1.04, "evade": 0, "damage_reduce": 0.05}
+}
+
 var player_position: Vector2 = WORLD_SIZE * 0.5
 var move_vector: Vector2 = Vector2.ZERO
 var joystick_vector: Vector2 = Vector2.ZERO
@@ -215,6 +248,10 @@ func _specialization_button_center() -> Vector2:
 
 func _current_class_data() -> Dictionary:
 	return CLASS_DATA[clampi(player_class_index, 0, CLASS_DATA.size() - 1)]
+
+func _current_passive_data() -> Dictionary:
+	var specs: Array = _current_class_data()["specs"]
+	return PASSIVE_DATA.get(String(specs[clampi(specialization_index, 0, specs.size() - 1)]), {})
 
 func _current_specialization_data() -> Dictionary:
 	var class_data := _current_class_data()
@@ -461,13 +498,7 @@ func _update_mobs(delta: float) -> void:
 							_add_floating_message("SLAM DODGED!", player_position + Vector2(0, -52), Color("#9fe6ef"))
 						else:
 							var class_armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"])
-						var slam_damage := maxi(1, (34 if guardian_enraged else 28) - armor_tier * 2 - armor_enchant * 2 - class_armor_bonus)
-							player_hp -= slam_damage
-							player_hit_flash = 0.28
-							_add_floating_message("SLAM -%d" % slam_damage, player_position + Vector2(0, -52), Color("#ff8d69"))
-							if player_hp <= 0:
-								player_hp = player_max_hp
-								player_position = WORLD_SIZE * 0.5
+						_apply_incoming_damage(34 if guardian_enraged else 28, "SLAM")
 				mob["slam_cooldown"] = 4.8
 			elif distance_to_player <= 180.0 and slam_cooldown <= 0.0:
 				mob["slam_windup"] = 0.82 if guardian_enraged else 1.15
@@ -500,13 +531,7 @@ func _update_mobs(delta: float) -> void:
 						_add_floating_message("DODGED!", player_position + Vector2(0, -42), Color("#9fe6ef"))
 					else:
 						var class_armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"])
-						var incoming_damage := maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2 - class_armor_bonus)
-						player_hp -= incoming_damage
-						player_hit_flash = 0.22
-						_add_floating_message("-%d" % incoming_damage, player_position + Vector2(0, -35), Color("#f28f82"))
-						if player_hp <= 0:
-							player_hp = player_max_hp
-							player_position = WORLD_SIZE * 0.5
+						_apply_incoming_damage(int(mob["damage"]), "")
 					mob["attack_cooldown"] = 0.85 if mob_name != "Ruin Guardian" else 1.25
 			elif local_attack_cooldown <= 0.0:
 				mob["attack_windup"] = windup_duration
@@ -514,6 +539,22 @@ func _update_mobs(delta: float) -> void:
 			mob["attack_windup"] = 0.0
 		mob["pos"] = mob_pos
 		mobs[i] = mob
+
+func _apply_incoming_damage(raw_damage: int, label: String) -> void:
+	var passive := _current_passive_data()
+	if randf() < float(passive.get("evade", 0.0)):
+		_add_floating_message("PASSIVE DODGE!", player_position + Vector2(0, -48), Color("#9fe6ef"))
+		return
+	var armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"]) + int(passive.get("armor", 0))
+	var reduction := float(passive.get("damage_reduce", 0.0))
+	var damage := maxi(1, int(round(float(maxi(1, raw_damage - armor_tier * 2 - armor_enchant * 2 - armor_bonus)) * (1.0 - reduction))))
+	player_hp -= damage
+	player_hit_flash = 0.24
+	var prefix := label + " -" if not label.is_empty() else "-"
+	_add_floating_message("%s%d" % [prefix, damage], player_position + Vector2(0, -45), Color("#ff8d69") if not label.is_empty() else Color("#f28f82"))
+	if player_hp <= 0:
+		player_hp = player_max_hp
+		player_position = WORLD_SIZE * 0.5
 
 func _try_attack() -> void:
 	if attack_cooldown > 0.0:
@@ -539,18 +580,20 @@ func _try_attack() -> void:
 		_add_floating_message("COMBO x3! +15%", player_position + Vector2(0, -68), Color("#b8e8a0"))
 	elif combo_count == 5:
 		_add_floating_message("COMBO x5! +35%", player_position + Vector2(0, -68), Color("#ffd56f"))
-	ultimate_charge = minf(100.0, ultimate_charge + 12.0)
+	ultimate_charge = minf(100.0, ultimate_charge + 12.0 + float(_current_passive_data().get("charge", 0.0)))
 	var slash_direction := (Vector2(target["pos"]) - player_position).normalized()
 	combat_effects.append({"kind": "slash", "pos": player_position, "dir": slash_direction, "life": 0.20, "duration": 0.20})
 	var class_data := _current_class_data()
 	var spec_data := _current_specialization_data()
 	var talent_bonus := _current_talent_bonus()
-	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0)) * float(spec_data.get("damage", 1.0)) * float(talent_bonus["damage"])))
+	var passive := _current_passive_data()
+	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0)) * float(spec_data.get("damage", 1.0)) * float(passive.get("attack", 1.0)) * float(talent_bonus["damage"])))
 	if String(class_data["name"]) == "Berserker" and float(player_hp) / float(player_max_hp) <= 0.4:
 		damage = int(round(float(damage) * 1.25))
 	var combo_bonus := 0.35 if combo_count >= 5 else (0.15 if combo_count >= 3 else 0.0)
+	combo_bonus += float(passive.get("combo", 0.0)) if combo_count >= 3 else 0.0
 	damage = int(round(float(damage) * (1.0 + combo_bonus)))
-	var critical_chance := minf(0.08 + float(weapon_enchant) * 0.04 + float(class_data.get("crit", 0.0)) + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]), 0.38)
+	var critical_chance := minf(0.45, 0.08 + float(weapon_enchant) * 0.04 + float(class_data.get("crit", 0.0)) + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)))
 	var is_critical := randf() < critical_chance
 	if is_critical:
 		damage = int(round(float(damage) * 1.75))
@@ -630,7 +673,8 @@ func _try_ultimate() -> void:
 	var ultimate: Dictionary = ULTIMATE_DATA.get(spec_name, {"name": "Ascendant Strike", "power": 1.25, "radius": 220.0, "heal": 0})
 	ultimate_charge = 0.0
 	var radius := float(ultimate["radius"])
-	var power := float(ultimate["power"])
+	var passive := _current_passive_data()
+	var power := float(ultimate["power"]) * float(passive.get("ultimate", 1.0))
 	var base_damage := float(70 + weapon_tier * 10 + weapon_enchant * 5)
 	combat_effects.append({"kind": "ultimate", "pos": player_position, "life": 0.72, "duration": 0.72})
 	_add_floating_message(String(ultimate["name"]) + "!", player_position + Vector2(0, -76), Color("#ffd28b"))
@@ -652,7 +696,7 @@ func _try_ultimate() -> void:
 		hit_count += 1
 		if int(mob["hp"]) <= 0:
 			_defeat_mob(mob)
-	var heal_amount := int(ultimate["heal"])
+	var heal_amount := int(ultimate["heal"]) + int(passive.get("heal", 0))
 	if hit_count > 0 and heal_amount > 0:
 		var old_hp := player_hp
 		player_hp = mini(player_max_hp, player_hp + heal_amount)
@@ -684,7 +728,8 @@ func _defeat_mob(mob: Dictionary) -> void:
 	_gain_xp(int(mob["xp"]))
 	if not is_boss:
 		_ensure_guardian_encounter()
-	var class_kill_heal := int(_current_class_data().get("kill_heal", 0)) + int(_current_specialization_data().get("heal", 0)) + int(_current_talent_bonus()["heal"])
+	var passive := _current_passive_data()
+	var class_kill_heal := int(_current_class_data().get("kill_heal", 0)) + int(_current_specialization_data().get("heal", 0)) + int(_current_talent_bonus()["heal"]) + int(passive.get("heal", 0))
 	if class_kill_heal > 0:
 		player_hp = mini(player_max_hp, player_hp + class_kill_heal)
 		_add_floating_message("CLASS HEAL +%d" % class_kill_heal, player_position + Vector2(0, -46), Color("#a8e6a0"))
@@ -1315,6 +1360,8 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(spec_center - Vector2(130, 22), Vector2(260, 44)), Color("#8eb6c5"), false, 2.0)
 	var current_specs: Array = current_class["specs"]
 	draw_string(ThemeDB.fallback_font, spec_center + Vector2(-118, 4), "SPEC: %s  [G]" % String(current_specs[specialization_index]), HORIZONTAL_ALIGNMENT_LEFT, 240, 12, Color("#d7e8ed"))
+	var passive_data := _current_passive_data()
+	draw_string(ThemeDB.fallback_font, Vector2(640, 338), "PASSIVE: %s" % String(passive_data.get("name", "None")), HORIZONTAL_ALIGNMENT_CENTER, 400, 12, Color("#b8e8a0"))
 	var talent_titles: Array[String] = ["OFFENSE", "DEFENSE", "UTILITY"]
 	for branch in range(3):
 		var talent_center := _talent_button_center(branch)
