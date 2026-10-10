@@ -179,14 +179,16 @@ func _update_mobs(delta: float) -> void:
 		var local_attack_cooldown := maxf(float(mob.get("attack_cooldown", 0.0)) - delta, 0.0)
 		mob["attack_cooldown"] = local_attack_cooldown
 		if mob_name == "Ruin Guardian":
-			var slam_cooldown := maxf(float(mob.get("slam_cooldown", 0.0)) - delta, 0.0)
+			var guardian_enraged := float(mob["hp"]) <= float(mob["max_hp"]) * 0.5
+			var cooldown_rate := 1.35 if guardian_enraged else 1.0
+			var slam_cooldown := maxf(float(mob.get("slam_cooldown", 0.0)) - delta * cooldown_rate, 0.0)
 			var slam_windup := float(mob.get("slam_windup", 0.0))
 			if slam_windup > 0.0:
 				slam_windup = maxf(slam_windup - delta, 0.0)
 				mob["slam_windup"] = slam_windup
 				if slam_windup <= 0.0:
 					if player_position.distance_to(mob_pos) <= 112.0:
-						var slam_damage := maxi(1, 28 - armor_tier * 2 - armor_enchant * 2)
+						var slam_damage := maxi(1, (34 if guardian_enraged else 28) - armor_tier * 2 - armor_enchant * 2)
 						player_hp -= slam_damage
 						player_hit_flash = 0.28
 						_add_floating_message("SLAM -%d" % slam_damage, player_position + Vector2(0, -52), Color("#ff8d69"))
@@ -196,7 +198,7 @@ func _update_mobs(delta: float) -> void:
 							player_position = WORLD_SIZE * 0.5
 				mob["slam_cooldown"] = 4.8
 			elif distance_to_player <= 180.0 and slam_cooldown <= 0.0:
-				mob["slam_windup"] = 1.15
+				mob["slam_windup"] = 0.82 if guardian_enraged else 1.15
 				mob["slam_cooldown"] = 4.8
 			else:
 				mob["slam_cooldown"] = slam_cooldown
@@ -642,8 +644,9 @@ func _draw_mobs() -> void:
 			body_color = Color("#fff0d4")
 		draw_circle(mob_pos + Vector2(1, 10), 23.0 if is_guardian else 15.0, Color(0.02, 0.025, 0.02, 0.35))
 		if is_guardian:
-			var guardian_glow := 0.22 + 0.12 * sin(elapsed * 3.0)
-			var guardian_color := Color("#d36b55")
+			var guardian_enraged := float(mob["hp"]) <= float(mob["max_hp"]) * 0.5
+			var guardian_glow := 0.28 + 0.18 * sin(elapsed * (5.0 if guardian_enraged else 3.0))
+			var guardian_color := Color("#ff4d35") if guardian_enraged else Color("#d36b55")
 			guardian_color.a = guardian_glow
 			draw_arc(mob_pos, 29.0 + sin(elapsed * 2.4) * 2.0, 0.0, TAU, 36, guardian_color, 4.0, true)
 			var slam_windup := float(mob.get("slam_windup", 0.0))
@@ -754,7 +757,8 @@ func _draw_hud() -> void:
 		if bool(mob.get("boss", false)) and bool(mob["alive"]):
 			var boss_hp_ratio := clampf(float(mob["hp"]) / float(mob["max_hp"]), 0.0, 1.0)
 			draw_rect(Rect2(440, 20, 400, 48), Color(0.035, 0.025, 0.03, 0.92))
-			draw_string(ThemeDB.fallback_font, Vector2(440, 16), "RUIN GUARDIAN", HORIZONTAL_ALIGNMENT_CENTER, 400, 16, Color("#f0c6b4"))
+			var boss_title := "RUIN GUARDIAN  •  ENRAGED" if float(mob["hp"]) <= float(mob["max_hp"]) * 0.5 else "RUIN GUARDIAN"
+			draw_string(ThemeDB.fallback_font, Vector2(440, 16), boss_title, HORIZONTAL_ALIGNMENT_CENTER, 400, 16, Color("#ff896d") if float(mob["hp"]) <= float(mob["max_hp"]) * 0.5 else Color("#f0c6b4"))
 			draw_rect(Rect2(456, 35, 368, 14), Color("#382629"))
 			draw_rect(Rect2(456, 35, 368.0 * boss_hp_ratio, 14), Color("#c74f46"))
 			draw_rect(Rect2(456, 35, 368, 14), Color("#f0a08a"), false, 1.5)
