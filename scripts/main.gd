@@ -11,12 +11,30 @@ var joystick_vector: Vector2 = Vector2.ZERO
 var joystick_active := false
 var joystick_touch_index := -1
 var elapsed := 0.0
+var player_max_hp := 100
+var player_hp := 100
+var player_level := 1
+var player_xp := 0
+var player_coins := 0
+var kills := 0
+var quest_reward_claimed := false
+var attack_cooldown := 0.0
+var mob_attack_cooldown := 0.0
+var mobs: Array[Dictionary] = []
+var save_path := "user://eldervale_save.json"
 
 func _ready() -> void:
+	_spawn_initial_mobs()
+	_load_progress()
 	queue_redraw()
 
 func _process(delta: float) -> void:
 	elapsed += delta
+	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
+	mob_attack_cooldown = maxf(mob_attack_cooldown - delta, 0.0)
+	if Input.is_action_just_pressed("ui_accept"):
+		_try_attack()
+	_update_mobs(delta)
 	var keyboard_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
@@ -31,12 +49,116 @@ func _input(event: InputEvent) -> void:
 			joystick_active = true
 			joystick_touch_index = event.index
 			_update_joystick(event.position)
+		elif event.pressed and event.position.x >= WORLD_SIZE.x * 0.48 and event.position.y > WORLD_SIZE.y * 0.48:
+			_try_attack()
 		elif not event.pressed and event.index == joystick_touch_index:
 			joystick_active = false
 			joystick_touch_index = -1
 			joystick_vector = Vector2.ZERO
 	elif event is InputEventScreenDrag and event.index == joystick_touch_index:
 		_update_joystick(event.position)
+
+func _spawn_initial_mobs() -> void:
+	mobs = [
+		{"name": "Ash Wolf", "pos": Vector2(690, 330), "hp": 36, "max_hp": 36, "damage": 7, "speed": 52.0, "xp": 18, "alive": true},
+		{"name": "Ash Wolf", "pos": Vector2(770, 475), "hp": 36, "max_hp": 36, "damage": 7, "speed": 52.0, "xp": 18, "alive": true},
+		{"name": "Ruins Stalker", "pos": Vector2(555, 270), "hp": 54, "max_hp": 54, "damage": 10, "speed": 40.0, "xp": 28, "alive": true},
+		{"name": "Ruins Stalker", "pos": Vector2(950, 300), "hp": 54, "max_hp": 54, "damage": 10, "speed": 40.0, "xp": 28, "alive": true},
+		{"name": "Dusk Scavenger", "pos": Vector2(370, 445), "hp": 28, "max_hp": 28, "damage": 5, "speed": 66.0, "xp": 14, "alive": true}
+	]
+
+func _update_mobs(delta: float) -> void:
+	for mob in mobs:
+		if not mob["alive"]:
+			continue
+		var mob_pos: Vector2 = mob["pos"]
+		var to_player := player_position - mob_pos
+		if to_player.length() < 310.0 and to_player.length() > 30.0:
+			mob_pos += to_player.normalized() * float(mob["speed"]) * delta
+			mob["pos"] = mob_pos
+		elif to_player.length() <= 34.0 and mob_attack_cooldown <= 0.0:
+			player_hp -= int(mob["damage"])
+			mob_attack_cooldown = 1.0
+			if player_hp <= 0:
+				player_hp = player_max_hp
+				player_position = WORLD_SIZE * 0.5
+		mob["pos"] = mob_pos
+
+func _try_attack() -> void:
+	if attack_cooldown > 0.0:
+		return
+	attack_cooldown = 0.42
+	var target_index := -1
+	var closest_distance := 88.0
+	for i in range(mobs.size()):
+		var mob: Dictionary = mobs[i]
+		if not mob["alive"]:
+			continue
+		var distance := player_position.distance_to(mob["pos"])
+		if distance < closest_distance:
+			closest_distance = distance
+			target_index = i
+	if target_index == -1:
+		return
+	var target: Dictionary = mobs[target_index]
+	target["hp"] = int(target["hp"]) - 20
+	if int(target["hp"]) <= 0:
+		target["alive"] = false
+		kills += 1
+		player_coins += 2 + player_level
+		_gain_xp(int(target["xp"]))
+		if kills >= 3 and not quest_reward_claimed:
+			quest_reward_claimed = true
+			player_xp += 60
+			player_coins += 25
+			_process_level_ups()
+		_save_progress()
+	queue_redraw()
+
+func _gain_xp(amount: int) -> void:
+	player_xp += amount
+	_process_level_ups()
+
+func _process_level_ups() -> void:
+	while player_xp >= _xp_for_next_level():
+		player_xp -= _xp_for_next_level()
+		player_level += 1
+		player_max_hp += 12
+		player_hp = player_max_hp
+
+func _xp_for_next_level() -> int:
+	return 50 + (player_level - 1) * 35
+
+func _save_progress() -> void:
+	var data := {
+		"level": player_level,
+		"xp": player_xp,
+		"coins": player_coins,
+		"kills": kills,
+		"quest_reward_claimed": quest_reward_claimed,
+		"player_hp": player_hp,
+		"player_max_hp": player_max_hp
+	}
+	var file := FileAccess.open(save_path, FileAccess.WRITE)
+	if file != null:
+		file.store_string(JSON.stringify(data))
+
+func _load_progress() -> void:
+	if not FileAccess.file_exists(save_path):
+		return
+	var file := FileAccess.open(save_path, FileAccess.READ)
+	if file == null:
+		return
+	var parsed = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	player_level = maxi(1, int(parsed.get("level", 1)))
+	player_xp = maxi(0, int(parsed.get("xp", 0)))
+	player_coins = maxi(0, int(parsed.get("coins", 0)))
+	kills = maxi(0, int(parsed.get("kills", 0)))
+	quest_reward_claimed = bool(parsed.get("quest_reward_claimed", false))
+	player_max_hp = maxi(100, int(parsed.get("player_max_hp", 100)))
+	player_hp = clampi(int(parsed.get("player_hp", player_max_hp)), 1, player_max_hp)
 
 func _update_joystick(screen_position: Vector2) -> void:
 	var offset := screen_position - JOYSTICK_CENTER
@@ -46,6 +168,7 @@ func _draw() -> void:
 	_draw_ground()
 	_draw_ruins()
 	_draw_trees()
+	_draw_mobs()
 	_draw_player()
 	_draw_hud()
 
@@ -125,6 +248,23 @@ func draw_ellipse_shadow(center: Vector2, radius: Vector2) -> void:
 		var shrink := float(i) * 2.0
 		draw_circle(center, maxf(radius.x - shrink, 1.0), Color(0.03, 0.05, 0.04, 0.09))
 
+func _draw_mobs() -> void:
+	for mob in mobs:
+		if not mob["alive"]:
+			continue
+		var mob_pos: Vector2 = mob["pos"]
+		var is_wolf := String(mob["name"]) == "Ash Wolf"
+		var body_color := Color("#8e6553") if is_wolf else (Color("#887d9c") if String(mob["name"]) == "Ruins Stalker" else Color("#a58a53"))
+		draw_circle(mob_pos + Vector2(1, 10), 15.0, Color(0.02, 0.025, 0.02, 0.35))
+		draw_circle(mob_pos, 13.0, body_color)
+		draw_circle(mob_pos + Vector2(-4, -5), 4.0, body_color.lightened(0.22))
+		draw_circle(mob_pos + Vector2(-4, -2), 2.0, Color("#e3b36b"))
+		draw_circle(mob_pos + Vector2(4, -2), 2.0, Color("#e3b36b"))
+		var bar_width := 34.0
+		draw_rect(Rect2(mob_pos + Vector2(-bar_width / 2.0, -24), Vector2(bar_width, 4)), Color("#241e1d"))
+		draw_rect(Rect2(mob_pos + Vector2(-bar_width / 2.0, -24), Vector2(bar_width * clampf(float(mob["hp"]) / float(mob["max_hp"]), 0.0, 1.0), 4)), Color("#b94d45"))
+		draw_string(ThemeDB.fallback_font, mob_pos + Vector2(-27, -30), String(mob["name"]), HORIZONTAL_ALIGNMENT_LEFT, 70, 9, Color("#ded2bd"))
+
 func _draw_player() -> void:
 	draw_circle(player_position + Vector2(2, 15), 18.0, Color(0.02, 0.03, 0.025, 0.28))
 	draw_circle(player_position + Vector2(0, 2), 14.0, Color("#283b36"))
@@ -139,15 +279,23 @@ func _draw_player() -> void:
 	draw_circle(player_position + Vector2(-3, -10), 2.0, Color("#26332d"))
 
 func _draw_hud() -> void:
-	draw_rect(Rect2(22, 20, 340, 76), Color(0.035, 0.055, 0.05, 0.88))
-	draw_rect(Rect2(22, 20, 4, 76), Color("#b98a51"))
-	draw_string(ThemeDB.fallback_font, Vector2(42, 49), "ELDERVALE", HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color("#e7dfc8"))
-	draw_string(ThemeDB.fallback_font, Vector2(43, 76), "THE ASHEN FRONTIER  •  PROTOTYPE", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#aab5a1"))
-	draw_rect(Rect2(WORLD_SIZE.x - 230, 22, 208, 54), Color(0.035, 0.055, 0.05, 0.82))
-	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 211, 44), "FOUNDATION BUILD", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#d7c59f"))
-	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 211, 62), "Move to explore", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#aab5a1"))
+	draw_rect(Rect2(22, 20, 350, 106), Color(0.035, 0.055, 0.05, 0.9))
+	draw_rect(Rect2(22, 20, 4, 106), Color("#b98a51"))
+	draw_string(ThemeDB.fallback_font, Vector2(42, 49), "ELDERVALE  •  LV. %d" % player_level, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color("#e7dfc8"))
+	draw_string(ThemeDB.fallback_font, Vector2(43, 72), "HP  %d / %d" % [player_hp, player_max_hp], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#e6a39a"))
+	draw_rect(Rect2(43, 80, 300, 8), Color("#392b2b"))
+	draw_rect(Rect2(43, 80, 300.0 * float(player_hp) / float(player_max_hp), 8), Color("#b84d46"))
+	draw_string(ThemeDB.fallback_font, Vector2(43, 108), "XP %d / %d     COINS %d" % [player_xp, _xp_for_next_level(), player_coins], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d7c59f"))
+	draw_rect(Rect2(WORLD_SIZE.x - 286, 22, 264, 76), Color(0.035, 0.055, 0.05, 0.88))
+	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 267, 45), "QUEST: ASHEN FRONTIER", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#d7c59f"))
+	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 267, 65), "Defeat 3 creatures: %d / 3" % mini(kills, 3), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
+	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 267, 84), "Reward: 60 XP + 25 coins" if not quest_reward_claimed else "Quest complete  •  Reward claimed", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#aab5a1"))
 	draw_circle(JOYSTICK_CENTER, JOYSTICK_RADIUS, Color(0.02, 0.035, 0.03, 0.45))
 	draw_arc(JOYSTICK_CENTER, JOYSTICK_RADIUS, 0.0, TAU, 48, Color(0.75, 0.78, 0.68, 0.65), 2.0)
 	var knob_position := JOYSTICK_CENTER + joystick_vector * (JOYSTICK_RADIUS * 0.58)
 	draw_circle(knob_position, 25.0, Color(0.65, 0.68, 0.58, 0.76))
 	draw_arc(knob_position, 25.0, 0.0, TAU, 32, Color("#d6d4bd"), 2.0)
+	var attack_center := Vector2(WORLD_SIZE.x - 100.0, WORLD_SIZE.y - 110.0)
+	draw_circle(attack_center, 52.0, Color(0.28, 0.12, 0.10, 0.72))
+	draw_arc(attack_center, 52.0, 0.0, TAU, 48, Color("#d8a66d"), 3.0)
+	draw_string(ThemeDB.fallback_font, attack_center + Vector2(-28, 5), "ATTACK", HORIZONTAL_ALIGNMENT_LEFT, 80, 15, Color("#f0dfc4"))
