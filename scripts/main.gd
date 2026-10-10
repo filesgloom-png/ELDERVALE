@@ -161,14 +161,14 @@ func _update_mobs(delta: float) -> void:
 		else:
 			mob.erase("hit_flash")
 		var to_player := player_position - mob_pos
+		var distance_to_player := to_player.length()
 		var local_attack_cooldown := maxf(float(mob.get("attack_cooldown", 0.0)) - delta, 0.0)
 		mob["attack_cooldown"] = local_attack_cooldown
 		var attack_windup := float(mob.get("attack_windup", 0.0))
-		if to_player.length() < 310.0 and to_player.length() > 34.0:
+		if distance_to_player < 310.0 and distance_to_player > 34.0:
 			mob_pos += to_player.normalized() * float(mob["speed"]) * delta
-			mob["pos"] = mob_pos
 			mob["attack_windup"] = 0.0
-		elif to_player.length() <= 34.0:
+		elif distance_to_player <= 34.0:
 			if attack_windup > 0.0:
 				attack_windup = maxf(attack_windup - delta, 0.0)
 				mob["attack_windup"] = attack_windup
@@ -477,7 +477,22 @@ func _draw_ground() -> void:
 				var tuft_y := tile_y + float(posmod(y * 23 + x * 11, 43)) + 8.0
 				draw_line(Vector2(tuft_x, tuft_y), Vector2(tuft_x - 3.0, tuft_y - 7.0), Color("#567052"), 2.0)
 				draw_line(Vector2(tuft_x, tuft_y), Vector2(tuft_x + 4.0, tuft_y - 5.0), Color("#6b8057"), 2.0)
+	_draw_moss_patches()
 	_draw_path()
+
+func _draw_moss_patches() -> void:
+	var patches: Array[Vector2] = [
+		Vector2(215, 220), Vector2(330, 410), Vector2(505, 205),
+		Vector2(650, 485), Vector2(895, 465), Vector2(1090, 355),
+		Vector2(1140, 255), Vector2(420, 620), Vector2(800, 85)
+	]
+	for i in range(patches.size()):
+		var p := patches[i]
+		var pulse := 0.035 + 0.018 * sin(elapsed * 1.4 + float(i))
+		var moss := Color("#8cb66a")
+		moss.a = pulse
+		draw_circle(p, 25.0 + sin(elapsed + float(i)) * 2.0, moss)
+		draw_circle(p + Vector2(9, -4), 13.0, moss)
 
 func _draw_path() -> void:
 	var path_points := PackedVector2Array([
@@ -556,6 +571,17 @@ func _draw_mobs() -> void:
 			var telegraph_color := Color("#ffb45c")
 			telegraph_color.a = 0.75 + 0.25 * sin(elapsed * 18.0)
 			draw_arc(mob_pos + Vector2(0, 3), 26.0, -PI * 0.5, -PI * 0.5 + TAU * windup_progress, 32, telegraph_color, 4.0, true)
+		var attack_windup := float(mob.get("attack_windup", 0.0))
+		if attack_windup > 0.0:
+			var windup_progress := 1.0 - clampf(attack_windup / 0.42, 0.0, 1.0)
+			var telegraph_color := Color("#ffb45c")
+			telegraph_color.a = 0.75 + 0.25 * sin(elapsed * 18.0)
+			draw_arc(mob_pos + Vector2(0, 3), 26.0, -PI * 0.5, -PI * 0.5 + TAU * windup_progress, 32, telegraph_color, 4.0, true)
+		if String(mob["name"]) == "Ruins Stalker":
+			var rune_glow := 0.35 + 0.22 * sin(elapsed * 3.2 + mob_pos.x * 0.02)
+			var rune_color := Color("#ad8bf0")
+			rune_color.a = rune_glow
+			draw_arc(mob_pos + Vector2(0, 2), 16.0 + sin(elapsed * 4.0) * 1.5, 0.0, TAU, 24, rune_color, 2.0, true)
 		draw_circle(mob_pos, 13.0, body_color)
 		draw_circle(mob_pos + Vector2(-4, -5), 4.0, body_color.lightened(0.22))
 		draw_circle(mob_pos + Vector2(-4, -2), 2.0, Color("#e3b36b"))
