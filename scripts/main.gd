@@ -20,6 +20,7 @@ var kills := 0
 var attack_cooldown := 0.0
 var skill_cooldown := 0.0
 var mob_attack_cooldown := 0.0
+var player_hit_flash := 0.0
 var weapon_tier := 0
 var armor_tier := 0
 var herbs := 0
@@ -42,6 +43,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	elapsed += delta
+	player_hit_flash = maxf(player_hit_flash - delta, 0.0)
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	skill_cooldown = maxf(skill_cooldown - delta, 0.0)
 	mob_attack_cooldown = maxf(mob_attack_cooldown - delta, 0.0)
@@ -161,7 +163,10 @@ func _update_mobs(delta: float) -> void:
 			mob_pos += to_player.normalized() * float(mob["speed"]) * delta
 			mob["pos"] = mob_pos
 		elif to_player.length() <= 34.0 and mob_attack_cooldown <= 0.0:
-			player_hp -= maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2)
+			var incoming_damage := maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2)
+			player_hp -= incoming_damage
+			player_hit_flash = 0.22
+			_add_floating_message("-%d" % incoming_damage, player_position + Vector2(0, -35), Color("#f28f82"))
 			mob_attack_cooldown = 1.0
 			if player_hp <= 0:
 				player_hp = player_max_hp
@@ -545,8 +550,10 @@ func _draw_floating_messages() -> void:
 
 func _draw_player() -> void:
 	draw_circle(player_position + Vector2(2, 15), 18.0, Color(0.02, 0.03, 0.025, 0.28))
-	draw_circle(player_position + Vector2(0, 2), 14.0, Color("#283b36"))
-	draw_circle(player_position + Vector2(0, -7), 9.0, Color("#c6ad8b"))
+	var body_color := Color("#fff0d4") if player_hit_flash > 0.0 else Color("#283b36")
+	var head_color := Color("#fff5e6") if player_hit_flash > 0.0 else Color("#c6ad8b")
+	draw_circle(player_position + Vector2(0, 2), 14.0, body_color)
+	draw_circle(player_position + Vector2(0, -7), 9.0, head_color)
 	draw_arc(player_position + Vector2(0, -7), 10.0, PI, TAU, 16, Color("#5b4335"), 4.0)
 	var weapon_direction := move_vector.normalized() if move_vector.length_squared() > 0.01 else Vector2(1, 0)
 	var weapon_start := player_position + weapon_direction * 9.0
