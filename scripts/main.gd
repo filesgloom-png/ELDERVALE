@@ -2159,8 +2159,15 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(22, 20, 4, 106), Color("#b98a51"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 49), "ELDERVALE  •  LV. %d" % player_level, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color("#e7dfc8"))
 	draw_string(ThemeDB.fallback_font, Vector2(43, 72), "HP  %d / %d" % [player_hp, player_max_hp], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#e6a39a"))
+	var hp_ratio := clampf(float(player_hp) / maxf(float(player_max_hp), 1.0), 0.0, 1.0)
+	var hp_low := hp_ratio <= 0.25
+	var hp_bar_color := Color("#b84d46")
+	if hp_low:
+		hp_bar_color = Color("#ff5b4d").lerp(Color("#ffb45c"), 0.5 + 0.5 * sin(elapsed * 8.0))
 	draw_rect(Rect2(43, 80, 300, 8), Color("#392b2b"))
-	draw_rect(Rect2(43, 80, 300.0 * float(player_hp) / float(player_max_hp), 8), Color("#b84d46"))
+	draw_rect(Rect2(43, 80, 300.0 * hp_ratio, 8), hp_bar_color)
+	if hp_low:
+		draw_rect(Rect2(43, 80, 300, 8), Color("#ffb45c"), false, 1.5)
 	draw_string(ThemeDB.fallback_font, Vector2(43, 108), "XP %d / %d     COINS %d" % [player_xp, _xp_for_next_level(), player_coins], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d7c59f"))
 	draw_rect(Rect2(WORLD_SIZE.x - 310, 22, 288, 116), Color(0.035, 0.055, 0.05, 0.9))
 	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 45), "QUESTS  •  WORLD JOURNAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#d7c59f"))
