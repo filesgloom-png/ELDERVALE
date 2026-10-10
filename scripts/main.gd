@@ -26,6 +26,8 @@ var armor_tier := 0
 var herbs := 0
 var potions := 0
 var relic_shards := 0
+var guardian_cores := 0
+var ancient_caches := 0
 var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
@@ -304,6 +306,10 @@ func _defeat_mob(mob: Dictionary) -> void:
 	_spawn_loot_drop(mob["pos"] + Vector2(-15, 8), "herbs", 1 + int(kills % 2))
 	if int(mob["xp"]) >= 28:
 		_spawn_loot_drop(mob["pos"] + Vector2(15, -8), "relic", 4 if is_boss else 1)
+	if is_boss:
+		_spawn_loot_drop(mob["pos"] + Vector2(-26, -18), "guardian_core", 1)
+		_spawn_loot_drop(mob["pos"] + Vector2(26, -18), "ancient_cache", 1)
+		_add_floating_message("GUARDIAN DEFEATED!", mob["pos"] + Vector2(0, -74), Color("#ffd28b"))
 	_gain_xp(int(mob["xp"]))
 	if not is_boss:
 		_ensure_guardian_encounter()
@@ -392,6 +398,14 @@ func _update_loot_drops(delta: float) -> void:
 					relic_shards += amount
 					label = "+%d RELIC SHARD" % amount
 					message_color = Color("#c6a0ef")
+				"guardian_core":
+					guardian_cores += amount
+					label = "ANCIENT CORE ACQUIRED"
+					message_color = Color("#ff9877")
+				"ancient_cache":
+					ancient_caches += amount
+					label = "ANCIENT CACHE ACQUIRED"
+					message_color = Color("#e7d49a")
 			_add_floating_message(label, player_position + Vector2(0, -42), message_color)
 			loot_drops.remove_at(i)
 			_save_progress()
@@ -490,6 +504,8 @@ func _save_progress() -> void:
 		"herbs": herbs,
 		"potions": potions,
 		"relic_shards": relic_shards,
+		"guardian_cores": guardian_cores,
+		"ancient_caches": ancient_caches,
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
@@ -520,6 +536,8 @@ func _load_progress() -> void:
 	herbs = maxi(0, int(parsed.get("herbs", 0)))
 	potions = maxi(0, int(parsed.get("potions", 0)))
 	relic_shards = maxi(0, int(parsed.get("relic_shards", 0)))
+	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
+	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 3)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 3)
 	player_max_hp = maxi(100, int(parsed.get("player_max_hp", 100)))
@@ -697,12 +715,17 @@ func _draw_loot_drops() -> void:
 	for drop in loot_drops:
 		var p: Vector2 = drop["pos"]
 		var drop_type := String(drop["type"])
-		var color := Color("#e0bd68") if drop_type == "coins" else (Color("#8fbd75") if drop_type == "herbs" else Color("#b58be0"))
+		var color := Color("#e0bd68") if drop_type == "coins" else (Color("#8fbd75") if drop_type == "herbs" else (Color("#ff9877") if drop_type == "guardian_core" else (Color("#e7d49a") if drop_type == "ancient_cache" else Color("#b58be0"))))
 		var pulse := 1.0 + 0.14 * sin(elapsed * 5.0 + float(p[0] + p[1]) * 0.03)
 		draw_circle(p + Vector2(0, 5), 9.0, Color(0.02, 0.025, 0.02, 0.32))
 		draw_circle(p, 7.0 * pulse, color)
 		draw_arc(p, 8.0 * pulse, 0.0, TAU, 20, color.lightened(0.45), 2.0)
-		var glyph := "G" if drop_type == "coins" else ("H" if drop_type == "herbs" else "R")
+		if drop_type == "guardian_core":
+			draw_arc(p, 12.0 * pulse, 0.0, TAU, 24, Color("#ffd0a1"), 2.0, true)
+		elif drop_type == "ancient_cache":
+			draw_rect(Rect2(p - Vector2(8, 7), Vector2(16, 14)), Color("#9c7441"))
+			draw_rect(Rect2(p - Vector2(8, 7), Vector2(16, 14)), Color("#f0d58b"), false, 2.0)
+		var glyph := "G" if drop_type == "coins" else ("H" if drop_type == "herbs" else ("C" if drop_type == "guardian_core" else ("A" if drop_type == "ancient_cache" else "R")))
 		draw_string(ThemeDB.fallback_font, p + Vector2(-3, 3), glyph, HORIZONTAL_ALIGNMENT_LEFT, 8, 8, Color("#22231d"))
 
 func _draw_combat_effects() -> void:
@@ -801,6 +824,7 @@ func _draw_hud() -> void:
 	draw_string(ThemeDB.fallback_font, attack_center + Vector2(-28, 5), "ATTACK", HORIZONTAL_ALIGNMENT_LEFT, 80, 15, Color("#f0dfc4"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 144), "ARMOR reduces damage • SKILL cooldown %.1fs" % skill_cooldown, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 164), "HERBS %d   POTIONS %d   RELIC SHARDS %d" % [herbs, potions, relic_shards], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
+	draw_string(ThemeDB.fallback_font, Vector2(42, 202), "GUARDIAN CORES %d   ANCIENT CACHES %d" % [guardian_cores, ancient_caches], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e7bd9a"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 184), "DAMAGE %d  •  ARMOR %d  •  RANGE 88" % [20 + weapon_tier * 8 + weapon_enchant * 4, armor_tier * 2 + armor_enchant * 2], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d7c59f"))
 	var forge_weapon_center := _forge_weapon_button_center()
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
