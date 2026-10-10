@@ -28,6 +28,8 @@ const WATCHTOWER_CACHE_POSITION := Vector2(770.0, 614.0)
 const WATCHTOWER_CACHE_RANGE := 58.0
 const FROSTFALL_ROUTE_POSITION := Vector2(896.0, 610.0)
 const FROSTFALL_ROUTE_RANGE := 58.0
+const FROSTFALL_EXIT_POSITION := Vector2(972.0, 640.0)
+const FROSTFALL_EXIT_RANGE := 64.0
 const CODEX_BUTTON_RECT := Rect2(1114.0, 145.0, 146.0, 44.0)
 const RUNE_BUTTON_RECT := Rect2(516.0, 620.0, 248.0, 58.0)
 const CODEX_CLOSE_RECT := Rect2(914.0, 124.0, 82.0, 38.0)
@@ -164,6 +166,7 @@ var nearby_frostwatch_relic := false
 var nearby_watchtower_symbol := -1
 var nearby_watchtower_cache := false
 var nearby_frostfall_route := false
+var nearby_frostfall_exit := false
 var hidden_passage_open := false
 var ancient_chest_claimed := false
 var shattered_reach_unlocked := false
@@ -176,6 +179,7 @@ var frostwatch_relic_discovered := false
 var watchtower_symbols := 0
 var watchtower_cache_claimed := false
 var frostfall_pass_open := false
+var frostfall_pass_entered := false
 var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
@@ -247,7 +251,8 @@ func _process(delta: float) -> void:
 				closest_watchtower_symbol_distance = symbol_distance
 				nearby_watchtower_symbol = symbol_index
 	nearby_watchtower_cache = watchtower_discovered and watchtower_symbols == 7 and not watchtower_cache_claimed and player_position.distance_to(WATCHTOWER_CACHE_POSITION) <= WATCHTOWER_CACHE_RANGE
-	nearby_frostfall_route = watchtower_discovered and player_position.distance_to(FROSTFALL_ROUTE_POSITION) <= FROSTFALL_ROUTE_RANGE
+	nearby_frostfall_route = watchtower_discovered and not frostfall_pass_entered and player_position.distance_to(FROSTFALL_ROUTE_POSITION) <= FROSTFALL_ROUTE_RANGE
+	nearby_frostfall_exit = frostfall_pass_entered and player_position.distance_to(FROSTFALL_EXIT_POSITION) <= FROSTFALL_EXIT_RANGE
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
 	if dodge_time > 0.0:
@@ -326,6 +331,8 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 			_inspect_watchtower_symbol(nearby_watchtower_symbol)
 		elif nearby_watchtower_cache:
 			_claim_watchtower_cache()
+		elif nearby_frostfall_exit:
+			_return_to_watchtower()
 		elif nearby_frostfall_route:
 			_open_frostfall_pass()
 		elif nearby_frostwatch_relic:
@@ -1135,7 +1142,12 @@ func _open_frostfall_pass() -> void:
 		_add_floating_message("THE PASS NEEDS THREE SYMBOLS, THE CACHE, AND THE FROSTWATCH RELIC", player_position + Vector2(0, -70), Color("#d7c59f"))
 		return
 	if frostfall_pass_open:
-		_add_floating_message("FROSTFALL PASS IS ALREADY OPEN", player_position + Vector2(0, -62), Color("#83e8e0"))
+		frostfall_pass_entered = true
+		player_position = Vector2(1080.0, 570.0)
+		_add_floating_message("ENTERED FROSTFALL PASS", player_position + Vector2(0, -70), Color("#b9dff2"))
+		_add_floating_message("THE SNOWBOUND FRONTIER LIES AHEAD", player_position + Vector2(0, -94), Color("#83e8e0"))
+		_save_progress()
+		queue_redraw()
 		return
 	frostfall_pass_open = true
 	_discover_codex_entry(20)
@@ -1143,6 +1155,16 @@ func _open_frostfall_pass() -> void:
 	_gain_xp(40)
 	_add_floating_message("FROSTFALL PASS UNSEALED", player_position + Vector2(0, -70), Color("#b9dff2"))
 	_add_floating_message("A NEW ROUTE OPENS BEYOND THE WATCHTOWER", player_position + Vector2(0, -94), Color("#83e8e0"))
+	_save_progress()
+	queue_redraw()
+
+
+func _return_to_watchtower() -> void:
+	if not frostfall_pass_entered:
+		return
+	frostfall_pass_entered = false
+	player_position = Vector2(870.0, 610.0)
+	_add_floating_message("RETURNED TO THE FORGOTTEN WATCHTOWER", player_position + Vector2(0, -70), Color("#b9dff2"))
 	_save_progress()
 	queue_redraw()
 
@@ -1452,7 +1474,7 @@ func _xp_for_next_level() -> int:
 
 func _save_progress() -> void:
 	var data := {
-		"save_version": 6,
+		"save_version": 7,
 		"level": player_level,
 		"talent_points": talent_points,
 		"talent_ranks": talent_ranks,
@@ -1489,6 +1511,7 @@ func _save_progress() -> void:
 		"watchtower_symbols": watchtower_symbols,
 		"watchtower_cache_claimed": watchtower_cache_claimed,
 		"frostfall_pass_open": frostfall_pass_open,
+		"frostfall_pass_entered": frostfall_pass_entered,
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
@@ -1588,6 +1611,7 @@ func _load_progress() -> void:
 	watchtower_symbols = clampi(int(parsed.get("watchtower_symbols", 0)), 0, 7)
 	watchtower_cache_claimed = bool(parsed.get("watchtower_cache_claimed", false))
 	frostfall_pass_open = bool(parsed.get("frostfall_pass_open", false))
+	frostfall_pass_entered = bool(parsed.get("frostfall_pass_entered", false))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
 	player_max_hp = clampi(int(parsed.get("player_max_hp", 100)), 100, 100000)
@@ -1606,6 +1630,7 @@ func _draw() -> void:
 	_draw_ruins()
 	_draw_shattered_reach()
 	_draw_forgotten_watchtower()
+	_draw_frostfall_pass()
 	_draw_hidden_hall()
 	_draw_ruin_objects()
 	_draw_hidden_gate()
@@ -1763,6 +1788,8 @@ func _draw_shattered_reach() -> void:
 
 
 func _draw_forgotten_watchtower() -> void:
+	if frostfall_pass_entered:
+		return
 	if not watchtower_path_open:
 		if northbound_signal_discovered:
 			var path_glow := Color("#b9dff2", 0.10 + 0.05 * sin(elapsed * 1.7))
@@ -1814,6 +1841,30 @@ func _draw_forgotten_watchtower() -> void:
 		draw_circle(FROSTFALL_ROUTE_POSITION, 17.0, route_glow)
 		draw_line(FROSTFALL_ROUTE_POSITION + Vector2(-8, 0), FROSTFALL_ROUTE_POSITION + Vector2(8, 0), Color("#839ca7"), 3.0)
 		draw_string(ThemeDB.fallback_font, FROSTFALL_ROUTE_POSITION + Vector2(-42, -22), "SEALED PASS", HORIZONTAL_ALIGNMENT_LEFT, 100, 9, Color("#b9dff2"))
+
+
+func _draw_frostfall_pass() -> void:
+	if not frostfall_pass_entered:
+		return
+	var pass_rect := Rect2(940.0, 480.0, 310.0, 190.0)
+	draw_rect(Rect2(pass_rect.position + Vector2(5, 6), pass_rect.size), Color("#101b22"))
+	draw_rect(pass_rect, Color("#b5cbd1"))
+	draw_rect(Rect2(pass_rect.position + Vector2(7, 7), pass_rect.size - Vector2(14, 14)), Color("#7898a4"))
+	for ridge_index in range(5):
+		var ridge_x := 960.0 + float(ridge_index) * 62.0
+		draw_line(Vector2(ridge_x, 520.0 + float(ridge_index % 2) * 10.0), Vector2(ridge_x + 30.0, 490.0), Color("#d8e8eb"), 3.0)
+		draw_line(Vector2(ridge_x + 30.0, 490.0), Vector2(ridge_x + 55.0, 520.0 + float(ridge_index % 2) * 10.0), Color("#526f7d"), 3.0)
+	draw_line(Vector2(1010, 620), Vector2(1070, 570), Color("#e4f3f4"), 12.0)
+	draw_line(Vector2(1070, 570), Vector2(1150, 545), Color("#d7e8ed"), 9.0)
+	draw_line(Vector2(1150, 545), Vector2(1215, 565), Color("#e4f3f4"), 7.0)
+	draw_circle(Vector2(1168, 535), 35.0 + 4.0 * sin(elapsed * 1.6), Color("#b9dff2", 0.10 + 0.05 * sin(elapsed * 1.6)))
+	draw_line(Vector2(1168, 515), Vector2(1168, 548), Color("#b9dff2"), 4.0)
+	draw_line(Vector2(1155, 528), Vector2(1181, 528), Color("#b9dff2"), 3.0)
+	draw_string(ThemeDB.fallback_font, Vector2(964, 505), "FROSTFALL PASS", HORIZONTAL_ALIGNMENT_LEFT, 250, 14, Color("#f0fbff"))
+	draw_string(ThemeDB.fallback_font, Vector2(964, 526), "THE SNOWBOUND FRONTIER", HORIZONTAL_ALIGNMENT_LEFT, 250, 10, Color("#d8eef4"))
+	draw_circle(FROSTFALL_EXIT_POSITION, 18.0, Color("#83e8e0", 0.12 + 0.06 * sin(elapsed * 2.0)))
+	draw_line(FROSTFALL_EXIT_POSITION + Vector2(-10, 0), FROSTFALL_EXIT_POSITION + Vector2(10, 0), Color("#83e8e0"), 3.0)
+	draw_string(ThemeDB.fallback_font, FROSTFALL_EXIT_POSITION + Vector2(-48, -20), "RETURN PATH", HORIZONTAL_ALIGNMENT_LEFT, 100, 9, Color("#e0f7ee"))
 
 
 func _draw_ancient_chest() -> void:
@@ -2188,7 +2239,7 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, -2), "POTION C/R", HORIZONTAL_ALIGNMENT_LEFT, 105, 12, Color("#e7dfc8"))
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, 15), "x%d / 3 herbs" % potions, HORIZONTAL_ALIGNMENT_LEFT, 105, 11, Color("#d7c59f"))
-	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon or nearby_northbound_signal or nearby_watchtower_path or nearby_frostwatch_relic or nearby_watchtower_symbol >= 0 or nearby_watchtower_cache or nearby_frostfall_route) and not codex_open:
+	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon or nearby_northbound_signal or nearby_watchtower_path or nearby_frostwatch_relic or nearby_watchtower_symbol >= 0 or nearby_watchtower_cache or nearby_frostfall_route or nearby_frostfall_exit) and not codex_open:
 		draw_rect(RUNE_BUTTON_RECT, Color(0.035, 0.12, 0.13, 0.96))
 		var interaction_color := Color("#83e8e0") if rune_nearby or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon or nearby_northbound_signal else Color("#d7c59f")
 		draw_rect(RUNE_BUTTON_RECT, interaction_color, false, 2.5)
@@ -2199,6 +2250,8 @@ func _draw_hud() -> void:
 			interaction_label = ["READ FIRST SYMBOL", "READ SECOND SYMBOL", "READ THIRD SYMBOL"][nearby_watchtower_symbol]
 		elif nearby_watchtower_cache and not rune_nearby:
 			interaction_label = "OPEN MEMORY CACHE"
+		elif nearby_frostfall_exit and not rune_nearby:
+			interaction_label = "RETURN TO WATCHTOWER"
 		elif nearby_frostfall_route and not rune_nearby:
 			interaction_label = "ENTER FROSTFALL PASS" if frostfall_pass_open else "UNSEAL FROSTFALL PASS"
 		elif nearby_frostwatch_relic and not rune_nearby:
