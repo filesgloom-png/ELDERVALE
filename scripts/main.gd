@@ -5,6 +5,8 @@ const JOYSTICK_CENTER := Vector2(112.0, 600.0)
 const JOYSTICK_RADIUS := 68.0
 const ANCIENT_RUNE_POSITION := Vector2(914.0, 296.0)
 const RUNE_INTERACTION_RANGE := 108.0
+const RUIN_OBJECT_POSITIONS := [Vector2(754.0, 328.0), Vector2(978.0, 388.0), Vector2(1090.0, 304.0)]
+const RUIN_OBJECT_RANGE := 92.0
 const CODEX_BUTTON_RECT := Rect2(1114.0, 145.0, 146.0, 44.0)
 const RUNE_BUTTON_RECT := Rect2(516.0, 620.0, 248.0, 58.0)
 const CODEX_CLOSE_RECT := Rect2(914.0, 124.0, 82.0, 38.0)
@@ -130,6 +132,7 @@ var codex_entries := 0
 var rune_studied := false
 var rune_activated := false
 var rune_nearby := false
+var nearby_ruin_object := -1
 var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
@@ -171,6 +174,15 @@ func _process(delta: float) -> void:
 	_update_combat_effects(delta)
 	var keyboard_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	rune_nearby = player_position.distance_to(ANCIENT_RUNE_POSITION) <= RUNE_INTERACTION_RANGE
+	nearby_ruin_object = -1
+	var closest_ruin_distance := RUIN_OBJECT_RANGE
+	for ruin_index in range(RUIN_OBJECT_POSITIONS.size()):
+		if (codex_entries & (1 << (6 + ruin_index))) != 0:
+			continue
+		var ruin_distance := player_position.distance_to(RUIN_OBJECT_POSITIONS[ruin_index])
+		if ruin_distance <= closest_ruin_distance:
+			closest_ruin_distance = ruin_distance
+			nearby_ruin_object = ruin_index
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
 	if dodge_time > 0.0:
@@ -238,8 +250,11 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 	if CODEX_BUTTON_RECT.has_point(screen_position):
 		_toggle_codex()
 		return
-	if rune_nearby and RUNE_BUTTON_RECT.has_point(screen_position):
-		_interact_with_ancient_rune()
+	if RUNE_BUTTON_RECT.has_point(screen_position):
+		if rune_nearby:
+			_interact_with_ancient_rune()
+		elif nearby_ruin_object >= 0:
+			_inspect_ruin_object(nearby_ruin_object)
 		return
 	for branch in range(3):
 		if screen_position.distance_to(_talent_button_center(branch)) <= 68.0:
@@ -856,7 +871,10 @@ func _discover_codex_entry(entry_id: int) -> void:
 		"Memory of the Guardian",
 		"The Cache Inscription",
 		"The First Convergence",
-		"The Rune of Convergence"
+		"The Rune of Convergence",
+		"The Watchstone Road",
+		"The Pilgrim's Oath",
+		"The Sealed Memory"
 	]
 	var reward_xp := 150 if entry_id == 5 else (100 if entry_id == 4 else 20)
 	var reward_coins := 75 if entry_id == 5 else (50 if entry_id == 4 else 10)
@@ -887,6 +905,24 @@ func _interact_with_ancient_rune() -> void:
 	rune_activated = true
 	_discover_codex_entry(5)
 	_add_floating_message("ANCIENT RUNE ACTIVATED", ANCIENT_RUNE_POSITION + Vector2(0, -54), Color("#83e8e0"))
+	_save_progress()
+	queue_redraw()
+
+func _inspect_ruin_object(object_index: int) -> void:
+	if object_index < 0 or object_index >= RUIN_OBJECT_POSITIONS.size():
+		return
+	var entry_id := 6 + object_index
+	if (codex_entries & (1 << entry_id)) != 0:
+		return
+	var object_names: Array[String] = ["Cracked Watchstone", "Pilgrim's Inscription", "Sealed Memory Cache"]
+	var discoveries: Array[String] = [
+		"The watchstone points toward a forgotten road.",
+		"The inscription speaks of three keepers and one oath.",
+		"The sealed cache reacts to the rune's distant pulse."
+	]
+	_add_floating_message(discoveries[object_index], player_position + Vector2(0, -68), Color("#d7c59f"))
+	_discover_codex_entry(entry_id)
+	_add_floating_message("RELIC INSPECTED: %s" % object_names[object_index], player_position + Vector2(0, -92), Color("#83e8e0"))
 	_save_progress()
 	queue_redraw()
 
@@ -1244,7 +1280,7 @@ func _load_progress() -> void:
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
 	echo_shards = clampi(int(parsed.get("echo_shards", 0)), 0, 999999)
-	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 63)
+	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 511)
 	rune_studied = bool(parsed.get("rune_studied", false))
 	rune_activated = bool(parsed.get("rune_activated", false))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
@@ -1263,6 +1299,7 @@ func _update_joystick(screen_position: Vector2) -> void:
 func _draw() -> void:
 	_draw_ground()
 	_draw_ruins()
+	_draw_ruin_objects()
 	_draw_ancient_rune()
 	_draw_trees()
 	_draw_mobs()
@@ -1327,6 +1364,32 @@ func _draw_ruins() -> void:
 		var stone_pos := Vector2(725.0 + float(i * 27), 260.0 + sin(float(i)) * 18.0)
 		draw_rect(Rect2(stone_pos, Vector2(22, 15)), Color("#65685a"))
 		draw_rect(Rect2(stone_pos + Vector2(2, 2), Vector2(18, 3)), Color("#858473"))
+
+func _draw_ruin_objects() -> void:
+	for object_index in range(RUIN_OBJECT_POSITIONS.size()):
+		var object_pos: Vector2 = RUIN_OBJECT_POSITIONS[object_index]
+		var discovered := (codex_entries & (1 << (6 + object_index))) != 0
+		var relic_color := Color("#83e8e0") if discovered else Color("#b8a477")
+		var pulse := 0.65 + 0.35 * sin(elapsed * 1.8 + float(object_index))
+		var relic_glow := relic_color
+		relic_glow.a = 0.07 + pulse * 0.08
+		draw_circle(object_pos, 28.0 + pulse * 3.0, relic_glow)
+		if object_index == 0:
+			draw_rect(Rect2(object_pos + Vector2(-15, -22), Vector2(30, 44)), Color("#4b5148"))
+			draw_rect(Rect2(object_pos + Vector2(-15, -22), Vector2(30, 44)), relic_color, false, 2.0)
+			draw_line(object_pos + Vector2(-4, -16), object_pos + Vector2(5, -4), Color("#262f2a"), 3.0)
+			draw_line(object_pos + Vector2(5, -4), object_pos + Vector2(-2, 7), Color("#262f2a"), 3.0)
+		elif object_index == 1:
+			draw_rect(Rect2(object_pos + Vector2(-23, -14), Vector2(46, 28)), Color("#625a48"))
+			draw_rect(Rect2(object_pos + Vector2(-23, -14), Vector2(46, 28)), relic_color, false, 2.0)
+			for line_index in range(3):
+				draw_line(object_pos + Vector2(-15, -7 + line_index * 7), object_pos + Vector2(14, -7 + line_index * 7), Color("#c9bd99") if discovered else Color("#383a30"), 2.0)
+		else:
+			draw_rect(Rect2(object_pos + Vector2(-19, -15), Vector2(38, 30)), Color("#514332"))
+			draw_rect(Rect2(object_pos + Vector2(-19, -15), Vector2(38, 30)), relic_color, false, 2.0)
+			draw_rect(Rect2(object_pos + Vector2(-5, -4), Vector2(10, 8)), Color("#d7bd78") if discovered else Color("#8e754a"))
+		if not discovered:
+			draw_circle(object_pos + Vector2(0, -29), 3.0 + pulse * 1.5, relic_color)
 
 func _draw_ancient_rune() -> void:
 	var pulse := 0.65 + 0.35 * sin(elapsed * 2.4)
@@ -1656,11 +1719,15 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, -2), "POTION C/R", HORIZONTAL_ALIGNMENT_LEFT, 105, 12, Color("#e7dfc8"))
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, 15), "x%d / 3 herbs" % potions, HORIZONTAL_ALIGNMENT_LEFT, 105, 11, Color("#d7c59f"))
-	if rune_nearby and not codex_open:
+	if (rune_nearby or nearby_ruin_object >= 0) and not codex_open:
 		draw_rect(RUNE_BUTTON_RECT, Color(0.035, 0.12, 0.13, 0.96))
-		draw_rect(RUNE_BUTTON_RECT, Color("#83e8e0") if not rune_activated else Color("#ffd28b"), false, 2.5)
-		var rune_label := "RUNE AWAKENED" if rune_activated else ("ACTIVATE RUNE" if rune_studied and (codex_entries & 15) == 15 else "STUDY ANCIENT RUNE")
-		draw_string(ThemeDB.fallback_font, RUNE_BUTTON_RECT.position + Vector2(18, 24), rune_label, HORIZONTAL_ALIGNMENT_CENTER, 212, 15, Color("#e0f7ee"))
+		var interaction_color := Color("#83e8e0") if rune_nearby else Color("#d7c59f")
+		draw_rect(RUNE_BUTTON_RECT, interaction_color, false, 2.5)
+		var interaction_label := "RUNE AWAKENED" if rune_activated else ("ACTIVATE RUNE" if rune_studied and (codex_entries & 15) == 15 else "STUDY ANCIENT RUNE")
+		if not rune_nearby and nearby_ruin_object >= 0:
+			var object_labels: Array[String] = ["INSPECT WATCHSTONE", "READ INSCRIPTION", "OPEN MEMORY CACHE"]
+			interaction_label = object_labels[nearby_ruin_object]
+		draw_string(ThemeDB.fallback_font, RUNE_BUTTON_RECT.position + Vector2(18, 24), interaction_label, HORIZONTAL_ALIGNMENT_CENTER, 212, 14, Color("#e0f7ee"))
 		draw_string(ThemeDB.fallback_font, RUNE_BUTTON_RECT.position + Vector2(18, 43), "TAP TO INTERACT", HORIZONTAL_ALIGNMENT_CENTER, 212, 10, Color("#a9c9c2"))
 	if codex_open:
 		var panel_rect := Rect2(260.0, 112.0, 760.0, 500.0)
@@ -1671,23 +1738,27 @@ func _draw_hud() -> void:
 		draw_rect(CODEX_CLOSE_RECT, Color("#83e8e0"), false, 1.5)
 		draw_string(ThemeDB.fallback_font, CODEX_CLOSE_RECT.position + Vector2(14, 24), "CLOSE", HORIZONTAL_ALIGNMENT_LEFT, 64, 12, Color("#e0f7ee"))
 		draw_string(ThemeDB.fallback_font, Vector2(300, 187), "Collect traces from combat and ancient relics. Four clues reveal a hidden convergence.", HORIZONTAL_ALIGNMENT_LEFT, 680, 12, Color("#a9c9c2"))
-		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence"]
+		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory"]
 		var codex_hints: Array[String] = [
 			"A fragment remembers something its owner forgot.",
 			"Three echoes briefly become one living force.",
 			"The Ruin Guardian carried a memory, not just a key.",
 			"An ancient cache bears the same mark as the echoes.",
 			"The four traces point toward a mystery beyond battle.",
-			"The ancient rune awakens only when all four traces align."
+			"The ancient rune awakens only when all four traces align.",
+			"This watchstone marks a road erased from ordinary maps.",
+			"Three keepers guarded one memory through the ages.",
+			"A sealed cache still responds to the rune's pulse."
 		]
 		var codex_found := 0
 		for entry_index in range(codex_titles.size()):
 			var discovered := (codex_entries & (1 << entry_index)) != 0
 			if discovered:
 				codex_found += 1
-			var entry_y := 220.0 + float(entry_index) * 52.0
-			draw_circle(Vector2(310, entry_y - 5.0), 9.0, Color("#83e8e0") if discovered else Color("#53615d"))
-			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y), "%02d  %s" % [entry_index + 1, codex_titles[entry_index] if discovered else "UNKNOWN TRACE"], HORIZONTAL_ALIGNMENT_LEFT, 620, 14, Color("#e0f7ee") if discovered else Color("#9ba7a2"))
-			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y + 20.0), codex_hints[entry_index] if discovered else "The details remain hidden until the trace is found.", HORIZONTAL_ALIGNMENT_LEFT, 640, 11, Color("#a9c9c2") if discovered else Color("#687571"))
+			var compact_codex := codex_titles.size() > 6
+			var entry_y := 211.0 + float(entry_index) * (39.0 if compact_codex else 52.0)
+			draw_circle(Vector2(310, entry_y - 4.0), 7.0 if compact_codex else 9.0, Color("#83e8e0") if discovered else Color("#53615d"))
+			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y), "%02d  %s" % [entry_index + 1, codex_titles[entry_index] if discovered else "UNKNOWN TRACE"], HORIZONTAL_ALIGNMENT_LEFT, 620, 12 if compact_codex else 14, Color("#e0f7ee") if discovered else Color("#9ba7a2"))
+			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y + (15.0 if compact_codex else 20.0)), codex_hints[entry_index] if discovered else "The details remain hidden until the trace is found.", HORIZONTAL_ALIGNMENT_LEFT, 640, 9 if compact_codex else 11, Color("#a9c9c2") if discovered else Color("#687571"))
 		draw_string(ThemeDB.fallback_font, Vector2(300, 574), "DISCOVERED %d / %d" % [codex_found, codex_titles.size()], HORIZONTAL_ALIGNMENT_LEFT, 220, 13, Color("#ffd28b"))
 		draw_string(ThemeDB.fallback_font, Vector2(570, 574), "TAP CLOSE OR OUTSIDE THE JOURNAL", HORIZONTAL_ALIGNMENT_LEFT, 400, 12, Color("#c5cfba"))
