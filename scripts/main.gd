@@ -191,7 +191,7 @@ func _process(delta: float) -> void:
 		if ruin_distance <= closest_ruin_distance:
 			closest_ruin_distance = ruin_distance
 			nearby_ruin_object = ruin_index
-	nearby_hidden_gate = not hidden_passage_open and (codex_entries & 448) == 448 and player_position.distance_to(HIDDEN_GATE_POSITION) <= HIDDEN_GATE_RANGE
+	nearby_hidden_gate = (codex_entries & 448) == 448 and player_position.distance_to(HIDDEN_GATE_POSITION) <= HIDDEN_GATE_RANGE
 	nearby_ancient_chest = hidden_passage_open and not ancient_chest_claimed and player_position.distance_to(ANCIENT_CHEST_POSITION) <= ANCIENT_CHEST_RANGE
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
@@ -1353,9 +1353,9 @@ func _draw() -> void:
 	_draw_ground()
 	_draw_ruins()
 	_draw_hidden_hall()
+	_draw_ruin_objects()
 	_draw_hidden_gate()
 	_draw_ancient_chest()
-	_draw_ruin_objects()
 	_draw_ancient_rune()
 	_draw_trees()
 	_draw_mobs()
