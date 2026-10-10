@@ -21,6 +21,9 @@ var attack_cooldown := 0.0
 var skill_cooldown := 0.0
 var mob_attack_cooldown := 0.0
 var player_hit_flash := 0.0
+var dodge_time := 0.0
+var dodge_cooldown := 0.0
+var dodge_direction: Vector2 = Vector2.RIGHT
 var weapon_tier := 0
 var armor_tier := 0
 var herbs := 0
@@ -49,6 +52,8 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	elapsed += delta
 	player_hit_flash = maxf(player_hit_flash - delta, 0.0)
+	dodge_time = maxf(dodge_time - delta, 0.0)
+	dodge_cooldown = maxf(dodge_cooldown - delta, 0.0)
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	skill_cooldown = maxf(skill_cooldown - delta, 0.0)
 	mob_attack_cooldown = maxf(mob_attack_cooldown - delta, 0.0)
@@ -61,7 +66,10 @@ func _process(delta: float) -> void:
 	var keyboard_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
-	player_position += move_vector * PLAYER_SPEED * delta
+	if dodge_time > 0.0:
+		player_position += dodge_direction * 560.0 * delta
+	else:
+		player_position += move_vector * PLAYER_SPEED * delta
 	player_position.x = clampf(player_position.x, 36.0, WORLD_SIZE.x - 36.0)
 	player_position.y = clampf(player_position.y, 70.0, WORLD_SIZE.y - 35.0)
 	queue_redraw()
@@ -82,6 +90,8 @@ func _input(event: InputEvent) -> void:
 			_craft_weapon_enchant()
 		elif event.keycode == KEY_X:
 			_craft_armor_enchant()
+		elif event.keycode == KEY_V:
+			_try_dodge()
 	if event is InputEventScreenTouch:
 		if event.pressed and event.position.x < WORLD_SIZE.x * 0.48 and event.position.y > WORLD_SIZE.y * 0.48:
 			joystick_active = true
@@ -114,6 +124,8 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 		_craft_weapon_enchant()
 	elif screen_position.distance_to(_forge_armor_button_center()) <= 55.0:
 		_craft_armor_enchant()
+	elif screen_position.distance_to(_dodge_button_center()) <= 50.0:
+		_try_dodge()
 
 func _attack_button_center() -> Vector2:
 	return Vector2(WORLD_SIZE.x - 100.0, WORLD_SIZE.y - 110.0)
@@ -135,6 +147,33 @@ func _forge_weapon_button_center() -> Vector2:
 
 func _forge_armor_button_center() -> Vector2:
 	return Vector2(295.0, 220.0)
+
+func _dodge_button_center() -> Vector2:
+	return Vector2(WORLD_SIZE.x - 220.0, WORLD_SIZE.y - 250.0)
+
+func _try_dodge() -> void:
+	if dodge_cooldown > 0.0 or dodge_time > 0.0:
+		return
+	var desired_direction := joystick_vector if joystick_vector.length_squared() > 0.001 else move_vector
+	if desired_direction.length_squared() <= 0.001:
+		var nearest_direction := Vector2.ZERO
+		var nearest_distance := INF
+		for mob in mobs:
+			if not bool(mob.get("alive", false)):
+				continue
+			var distance := player_position.distance_to(Vector2(mob["pos"]))
+			if distance < nearest_distance:
+				nearest_distance = distance
+				nearest_direction = player_position - Vector2(mob["pos"])
+		desired_direction = nearest_direction
+	if desired_direction.length_squared() <= 0.001:
+		desired_direction = Vector2.RIGHT
+	dodge_direction = desired_direction.normalized()
+	dodge_time = 0.42
+	dodge_cooldown = 2.8
+	combat_effects.append({"kind": "dodge", "pos": player_position, "dir": dodge_direction, "life": 0.30, "duration": 0.30})
+	_add_floating_message("DODGE!", player_position + Vector2(0, -48), Color("#9fe6ef"))
+	queue_redraw()
 
 func _spawn_initial_mobs() -> void:
 	mobs = [
@@ -190,14 +229,17 @@ func _update_mobs(delta: float) -> void:
 				mob["slam_windup"] = slam_windup
 				if slam_windup <= 0.0:
 					if player_position.distance_to(mob_pos) <= 112.0:
-						var slam_damage := maxi(1, (34 if guardian_enraged else 28) - armor_tier * 2 - armor_enchant * 2)
-						player_hp -= slam_damage
-						player_hit_flash = 0.28
-						_add_floating_message("SLAM -%d" % slam_damage, player_position + Vector2(0, -52), Color("#ff8d69"))
 						combat_effects.append({"kind": "pulse", "pos": mob_pos, "life": 0.42, "duration": 0.42})
-						if player_hp <= 0:
-							player_hp = player_max_hp
-							player_position = WORLD_SIZE * 0.5
+						if dodge_time > 0.0:
+							_add_floating_message("SLAM DODGED!", player_position + Vector2(0, -52), Color("#9fe6ef"))
+						else:
+							var slam_damage := maxi(1, (34 if guardian_enraged else 28) - armor_tier * 2 - armor_enchant * 2)
+							player_hp -= slam_damage
+							player_hit_flash = 0.28
+							_add_floating_message("SLAM -%d" % slam_damage, player_position + Vector2(0, -52), Color("#ff8d69"))
+							if player_hp <= 0:
+								player_hp = player_max_hp
+								player_position = WORLD_SIZE * 0.5
 				mob["slam_cooldown"] = 4.8
 			elif distance_to_player <= 180.0 and slam_cooldown <= 0.0:
 				mob["slam_windup"] = 0.82 if guardian_enraged else 1.15
@@ -226,14 +268,17 @@ func _update_mobs(delta: float) -> void:
 				attack_windup = maxf(attack_windup - delta, 0.0)
 				mob["attack_windup"] = attack_windup
 				if attack_windup <= 0.0:
-					var incoming_damage := maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2)
-					player_hp -= incoming_damage
-					player_hit_flash = 0.22
-					_add_floating_message("-%d" % incoming_damage, player_position + Vector2(0, -35), Color("#f28f82"))
+					if dodge_time > 0.0:
+						_add_floating_message("DODGED!", player_position + Vector2(0, -42), Color("#9fe6ef"))
+					else:
+						var incoming_damage := maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2)
+						player_hp -= incoming_damage
+						player_hit_flash = 0.22
+						_add_floating_message("-%d" % incoming_damage, player_position + Vector2(0, -35), Color("#f28f82"))
+						if player_hp <= 0:
+							player_hp = player_max_hp
+							player_position = WORLD_SIZE * 0.5
 					mob["attack_cooldown"] = 0.85 if mob_name != "Ruin Guardian" else 1.25
-					if player_hp <= 0:
-						player_hp = player_max_hp
-						player_position = WORLD_SIZE * 0.5
 			elif local_attack_cooldown <= 0.0:
 				mob["attack_windup"] = windup_duration
 		else:
@@ -783,6 +828,13 @@ func _draw_combat_effects() -> void:
 			var slash_color := Color("#f5dfad")
 			slash_color.a = (1.0 - progress) * 0.92
 			draw_arc(center, 30.0 + progress * 8.0, direction.angle() - 0.95, direction.angle() + 0.95, 20, slash_color, 4.0, true)
+		elif String(effect["kind"]) == "dodge":
+			var direction: Vector2 = effect["dir"]
+			var dodge_color := Color("#9fe6ef")
+			dodge_color.a = (1.0 - progress) * 0.8
+			for trail_index in range(3):
+				var trail_offset := -direction * float(trail_index + 1) * 12.0
+				draw_line(Vector2(effect["pos"]) + trail_offset, Vector2(effect["pos"]) + trail_offset - direction * 10.0, dodge_color, 5.0 - float(trail_index))
 		elif String(effect["kind"]) == "hit":
 			var hit_color := Color("#ffd58b")
 			hit_color.a = (1.0 - progress) * 0.95
@@ -866,6 +918,11 @@ func _draw_hud() -> void:
 	draw_circle(attack_center, 52.0, Color(0.28, 0.12, 0.10, 0.72))
 	draw_arc(attack_center, 52.0, 0.0, TAU, 48, Color("#d8a66d"), 3.0)
 	draw_string(ThemeDB.fallback_font, attack_center + Vector2(-28, 5), "ATTACK", HORIZONTAL_ALIGNMENT_LEFT, 80, 15, Color("#f0dfc4"))
+	var dodge_center := _dodge_button_center()
+	draw_circle(dodge_center, 40.0, Color(0.08, 0.22, 0.25, 0.88))
+	draw_arc(dodge_center, 40.0, 0.0, TAU, 40, Color("#9fe6ef"), 3.0)
+	draw_string(ThemeDB.fallback_font, dodge_center + Vector2(-25, -2), "DODGE", HORIZONTAL_ALIGNMENT_LEFT, 70, 12, Color("#d7f4f5"))
+	draw_string(ThemeDB.fallback_font, dodge_center + Vector2(-24, 15), "%.1fs" % dodge_cooldown if dodge_cooldown > 0.0 else "READY  V", HORIZONTAL_ALIGNMENT_LEFT, 70, 10, Color("#9fe6ef"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 144), "ARMOR reduces damage • SKILL cooldown %.1fs" % skill_cooldown, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 164), "HERBS %d   POTIONS %d   RELIC SHARDS %d" % [herbs, potions, relic_shards], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 202), "GUARDIAN CORES %d   ANCIENT CACHES %d" % [guardian_cores, ancient_caches], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e7bd9a"))
