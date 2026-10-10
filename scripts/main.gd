@@ -2120,7 +2120,7 @@ func _draw_hud() -> void:
 		draw_rect(CODEX_CLOSE_RECT, Color("#83e8e0"), false, 1.5)
 		draw_string(ThemeDB.fallback_font, CODEX_CLOSE_RECT.position + Vector2(14, 24), "CLOSE", HORIZONTAL_ALIGNMENT_LEFT, 64, 12, Color("#e0f7ee"))
 		draw_string(ThemeDB.fallback_font, Vector2(300, 187), "Collect traces from combat and ancient relics. Four clues reveal a hidden convergence.", HORIZONTAL_ALIGNMENT_LEFT, 680, 12, Color("#a9c9c2"))
-		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian", "The Shattered Reach", "The First Beacon", "The Northbound Signal", "The Forgotten Watchtower", "Frostwatch Relic"
+		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian", "The Shattered Reach", "The First Beacon", "The Northbound Signal", "The Forgotten Watchtower", "Frostwatch Relic"]
 		var codex_hints: Array[String] = [
 			"A fragment remembers something its owner forgot.",
 			"Three echoes briefly become one living force.",
