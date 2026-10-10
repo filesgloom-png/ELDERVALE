@@ -2094,12 +2094,15 @@ func _draw_combat_effects() -> void:
 				var trail_offset := -direction * float(trail_index + 1) * 12.0
 				draw_line(Vector2(effect["pos"]) + trail_offset, Vector2(effect["pos"]) + trail_offset - direction * 10.0, dodge_color, 5.0 - float(trail_index))
 		elif String(effect["kind"]) == "hit":
-			var hit_color := Color("#ffd58b")
+			var hit_color := Color("#fff0c2")
 			hit_color.a = (1.0 - progress) * 0.95
-			for ray_index in range(6):
-				var ray_angle := TAU * float(ray_index) / 6.0
+			var hit_center: Vector2 = effect["pos"]
+			var hit_radius := 7.0 + progress * 17.0
+			draw_arc(hit_center, hit_radius, 0.0, TAU, 20, hit_color, 2.0, true)
+			for ray_index in range(8):
+				var ray_angle := TAU * float(ray_index) / 8.0 + progress * 0.12
 				var ray_direction := Vector2(cos(ray_angle), sin(ray_angle))
-				draw_line(Vector2(effect["pos"]) + ray_direction * 4.0, Vector2(effect["pos"]) + ray_direction * (10.0 + progress * 13.0), hit_color, 2.0)
+				draw_line(hit_center + ray_direction * 5.0, hit_center + ray_direction * (10.0 + progress * 14.0), hit_color, 2.0)
 		else:
 			var pulse_color := Color("#9fd9e8")
 			pulse_color.a = (1.0 - progress) * 0.72
