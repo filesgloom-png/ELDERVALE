@@ -544,7 +544,7 @@ func _apply_incoming_damage(raw_damage: int, label: String) -> void:
 	var passive := _current_passive_data()
 	if randf() < clampf(float(passive.get("evade", 0.0)), 0.0, 0.08):
 		combat_effects.append({"kind": "dodge", "pos": player_position, "dir": dodge_direction, "life": 0.28, "duration": 0.28})
-		_add_floating_message("PASSIVE: %s • EVADE" % String(passive.get("name", "DODGE")), player_position + Vector2(0, -48), Color("#9fe6ef"))
+		_show_passive_proc("PASSIVE: %s • EVADE" % String(passive.get("name", "DODGE")), player_position, Color("#9fe6ef"))
 		return
 	var armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"]) + int(passive.get("armor", 0))
 	var reduction := clampf(float(passive.get("damage_reduce", 0.0)), 0.0, 0.08)
@@ -580,11 +580,11 @@ func _try_attack() -> void:
 	if combo_count == 3:
 		_add_floating_message("COMBO x3! +15%", player_position + Vector2(0, -68), Color("#b8e8a0"))
 		if float(_current_passive_data().get("combo", 0.0)) > 0.0:
-			_add_floating_message("PASSIVE COMBO +%d%%" % int(round(float(_current_passive_data()["combo"]) * 100.0)), player_position + Vector2(0, -88), Color("#b8e8a0"))
+			_show_passive_proc("PASSIVE COMBO +%d%%" % int(round(float(_current_passive_data()["combo"]) * 100.0)), player_position, Color("#b8e8a0"))
 	elif combo_count == 5:
 		_add_floating_message("COMBO x5! +35%", player_position + Vector2(0, -68), Color("#ffd56f"))
 		if float(_current_passive_data().get("combo", 0.0)) > 0.0:
-			_add_floating_message("PASSIVE COMBO +%d%%" % int(round(float(_current_passive_data()["combo"]) * 100.0)), player_position + Vector2(0, -88), Color("#b8e8a0"))
+			_show_passive_proc("PASSIVE COMBO +%d%%" % int(round(float(_current_passive_data()["combo"]) * 100.0)), player_position, Color("#b8e8a0"))
 	ultimate_charge = minf(100.0, ultimate_charge + 12.0 + float(_current_passive_data().get("charge", 0.0)))
 	var slash_direction := (Vector2(target["pos"]) - player_position).normalized()
 	combat_effects.append({"kind": "slash", "pos": player_position, "dir": slash_direction, "life": 0.20, "duration": 0.20})
@@ -670,7 +670,7 @@ func _try_skill() -> void:
 				_defeat_mob(mob)
 	if hit_any:
 		var passive_name := String(_current_passive_data().get("name", ""))
-		_add_floating_message("PASSIVE SKILL: %s" % passive_name, player_position + Vector2(0, -76), Color("#b8e8a0"))
+		_show_passive_proc("PASSIVE SKILL: %s" % passive_name, player_position, Color("#b8e8a0"))
 		_save_progress()
 	queue_redraw()
 
@@ -691,7 +691,7 @@ func _try_ultimate() -> void:
 	var base_damage := float(70 + weapon_tier * 10 + weapon_enchant * 5)
 	combat_effects.append({"kind": "ultimate", "pos": player_position, "life": 0.72, "duration": 0.72})
 	_add_floating_message(String(ultimate["name"]) + "!", player_position + Vector2(0, -76), Color("#ffd28b"))
-	_add_floating_message("PASSIVE ULTIMATE: %s" % String(passive.get("name", "ASCENDANT")), player_position + Vector2(0, -96), Color("#b8e8a0"))
+	_show_passive_proc("PASSIVE ULTIMATE: %s" % String(passive.get("name", "ASCENDANT")), player_position, Color("#b8e8a0"))
 	var hit_count := 0
 	for mob in mobs:
 		if not bool(mob.get("alive", false)):
@@ -862,6 +862,16 @@ func _add_floating_message(message: String, message_position: Vector2, message_c
 		"color": message_color,
 		"life": 1.25
 	})
+
+func _show_passive_proc(message: String, effect_position: Vector2, effect_color: Color) -> void:
+	combat_effects.append({
+		"kind": "passive_proc",
+		"pos": effect_position,
+		"color": effect_color,
+		"life": 0.46,
+		"duration": 0.46
+	})
+	_add_floating_message(message, effect_position + Vector2(0, -72), effect_color)
 
 func _update_floating_messages(delta: float) -> void:
 	for i in range(floating_messages.size() - 1, -1, -1):
@@ -1255,6 +1265,16 @@ func _draw_combat_effects() -> void:
 				var ray_direction := Vector2(cos(ray_angle), sin(ray_angle))
 				draw_line(ultimate_center + ray_direction * (18.0 + progress * 20.0), ultimate_center + ray_direction * (72.0 + progress * 170.0), ultimate_color, 3.0)
 			draw_arc(ultimate_center, 34.0 + progress * 205.0, 0.0, TAU, 64, ultimate_color, 5.0 - progress * 2.0, true)
+		elif String(effect["kind"]) == "passive_proc":
+			var proc_color: Color = effect.get("color", Color("#b8e8a0"))
+			proc_color.a = (1.0 - progress) * 0.9
+			var proc_center: Vector2 = effect["pos"]
+			var proc_radius := 16.0 + progress * 48.0
+			draw_arc(proc_center, proc_radius, progress * 1.2, TAU - progress * 0.4, 40, proc_color, 3.0, true)
+			for ray_index in range(8):
+				var ray_angle := TAU * float(ray_index) / 8.0 + progress * 0.45
+				var ray_direction := Vector2(cos(ray_angle), sin(ray_angle))
+				draw_line(proc_center + ray_direction * (proc_radius + 3.0), proc_center + ray_direction * (proc_radius + 10.0), proc_color, 2.0)
 		elif String(effect["kind"]) == "dodge":
 			var direction: Vector2 = effect["dir"]
 			var dodge_color := Color("#9fe6ef")
