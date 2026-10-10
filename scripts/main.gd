@@ -178,6 +178,28 @@ func _update_mobs(delta: float) -> void:
 			windup_duration = 0.92
 		var local_attack_cooldown := maxf(float(mob.get("attack_cooldown", 0.0)) - delta, 0.0)
 		mob["attack_cooldown"] = local_attack_cooldown
+		if mob_name == "Ruin Guardian":
+			var slam_cooldown := maxf(float(mob.get("slam_cooldown", 0.0)) - delta, 0.0)
+			var slam_windup := float(mob.get("slam_windup", 0.0))
+			if slam_windup > 0.0:
+				slam_windup = maxf(slam_windup - delta, 0.0)
+				mob["slam_windup"] = slam_windup
+				if slam_windup <= 0.0:
+					if player_position.distance_to(mob_pos) <= 112.0:
+						var slam_damage := maxi(1, 28 - armor_tier * 2 - armor_enchant * 2)
+						player_hp -= slam_damage
+						player_hit_flash = 0.28
+						_add_floating_message("SLAM -%d" % slam_damage, player_position + Vector2(0, -52), Color("#ff8d69"))
+						combat_effects.append({"kind": "pulse", "pos": mob_pos, "life": 0.42, "duration": 0.42})
+						if player_hp <= 0:
+							player_hp = player_max_hp
+							player_position = WORLD_SIZE * 0.5
+				mob["slam_cooldown"] = 4.8
+			elif distance_to_player <= 180.0 and slam_cooldown <= 0.0:
+				mob["slam_windup"] = 1.15
+				mob["slam_cooldown"] = 4.8
+			else:
+				mob["slam_cooldown"] = slam_cooldown
 		var attack_windup := float(mob.get("attack_windup", 0.0))
 		if distance_to_player < 310.0 and distance_to_player > attack_range:
 			var movement_direction := to_player.normalized()
@@ -624,6 +646,20 @@ func _draw_mobs() -> void:
 			var guardian_color := Color("#d36b55")
 			guardian_color.a = guardian_glow
 			draw_arc(mob_pos, 29.0 + sin(elapsed * 2.4) * 2.0, 0.0, TAU, 36, guardian_color, 4.0, true)
+			var slam_windup := float(mob.get("slam_windup", 0.0))
+			if slam_windup > 0.0:
+				var warning_alpha := 0.18 + 0.08 * sin(elapsed * 18.0)
+				var danger_fill := Color("#f05b48")
+				danger_fill.a = warning_alpha
+				draw_circle(mob_pos, 112.0, danger_fill)
+				var danger_outline := Color("#ff7658")
+				danger_outline.a = 0.88
+				draw_arc(mob_pos, 112.0, 0.0, TAU, 56, danger_outline, 4.0, true)
+				for marker_index in range(8):
+					var marker_angle := TAU * float(marker_index) / 8.0 + elapsed * 0.8
+					var marker_direction := Vector2(cos(marker_angle), sin(marker_angle))
+					draw_line(mob_pos + marker_direction * 94.0, mob_pos + marker_direction * 108.0, Color("#ffd0a1"), 3.0)
+				draw_string(ThemeDB.fallback_font, mob_pos + Vector2(-42, -66), "DODGE!", HORIZONTAL_ALIGNMENT_CENTER, 84, 16, Color("#ffd0a1"))
 		var threat_distance := player_position.distance_to(mob_pos)
 		if threat_distance <= 76.0:
 			var warning_color := Color("#e36b5d")
@@ -714,6 +750,15 @@ func _draw_player() -> void:
 	draw_circle(player_position + Vector2(-3, -10), 2.0, Color("#26332d"))
 
 func _draw_hud() -> void:
+	for mob in mobs:
+		if bool(mob.get("boss", false)) and bool(mob["alive"]):
+			var boss_hp_ratio := clampf(float(mob["hp"]) / float(mob["max_hp"]), 0.0, 1.0)
+			draw_rect(Rect2(440, 20, 400, 48), Color(0.035, 0.025, 0.03, 0.92))
+			draw_string(ThemeDB.fallback_font, Vector2(440, 16), "RUIN GUARDIAN", HORIZONTAL_ALIGNMENT_CENTER, 400, 16, Color("#f0c6b4"))
+			draw_rect(Rect2(456, 35, 368, 14), Color("#382629"))
+			draw_rect(Rect2(456, 35, 368.0 * boss_hp_ratio, 14), Color("#c74f46"))
+			draw_rect(Rect2(456, 35, 368, 14), Color("#f0a08a"), false, 1.5)
+			break
 	draw_rect(Rect2(22, 20, 350, 106), Color(0.035, 0.055, 0.05, 0.9))
 	draw_rect(Rect2(22, 20, 4, 106), Color("#b98a51"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 49), "ELDERVALE  •  LV. %d" % player_level, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color("#e7dfc8"))
