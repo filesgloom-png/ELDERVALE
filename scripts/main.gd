@@ -542,11 +542,12 @@ func _update_mobs(delta: float) -> void:
 
 func _apply_incoming_damage(raw_damage: int, label: String) -> void:
 	var passive := _current_passive_data()
-	if randf() < float(passive.get("evade", 0.0)):
-		_add_floating_message("PASSIVE DODGE!", player_position + Vector2(0, -48), Color("#9fe6ef"))
+	if randf() < clampf(float(passive.get("evade", 0.0)), 0.0, 0.08):
+		combat_effects.append({"kind": "dodge", "pos": player_position, "dir": dodge_direction, "life": 0.28, "duration": 0.28})
+		_add_floating_message("PASSIVE: %s • EVADE" % String(passive.get("name", "DODGE")), player_position + Vector2(0, -48), Color("#9fe6ef"))
 		return
 	var armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"]) + int(passive.get("armor", 0))
-	var reduction := float(passive.get("damage_reduce", 0.0))
+	var reduction := clampf(float(passive.get("damage_reduce", 0.0)), 0.0, 0.08)
 	var damage := maxi(1, int(round(float(maxi(1, raw_damage - armor_tier * 2 - armor_enchant * 2 - armor_bonus)) * (1.0 - reduction))))
 	player_hp -= damage
 	player_hit_flash = 0.24
@@ -578,8 +579,12 @@ func _try_attack() -> void:
 	combo_timer = 1.65
 	if combo_count == 3:
 		_add_floating_message("COMBO x3! +15%", player_position + Vector2(0, -68), Color("#b8e8a0"))
+		if float(_current_passive_data().get("combo", 0.0)) > 0.0:
+			_add_floating_message("PASSIVE COMBO +%d%%" % int(round(float(_current_passive_data()["combo"]) * 100.0)), player_position + Vector2(0, -88), Color("#b8e8a0"))
 	elif combo_count == 5:
 		_add_floating_message("COMBO x5! +35%", player_position + Vector2(0, -68), Color("#ffd56f"))
+		if float(_current_passive_data().get("combo", 0.0)) > 0.0:
+			_add_floating_message("PASSIVE COMBO +%d%%" % int(round(float(_current_passive_data()["combo"]) * 100.0)), player_position + Vector2(0, -88), Color("#b8e8a0"))
 	ultimate_charge = minf(100.0, ultimate_charge + 12.0 + float(_current_passive_data().get("charge", 0.0)))
 	var slash_direction := (Vector2(target["pos"]) - player_position).normalized()
 	combat_effects.append({"kind": "slash", "pos": player_position, "dir": slash_direction, "life": 0.20, "duration": 0.20})
@@ -587,7 +592,8 @@ func _try_attack() -> void:
 	var spec_data := _current_specialization_data()
 	var talent_bonus := _current_talent_bonus()
 	var passive := _current_passive_data()
-	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0)) * float(spec_data.get("damage", 1.0)) * float(passive.get("attack", 1.0)) * float(talent_bonus["damage"])))
+	var passive_attack_multiplier := clampf(float(passive.get("attack", 1.0)), 0.90, 1.16)
+	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0)) * float(spec_data.get("damage", 1.0)) * passive_attack_multiplier * float(talent_bonus["damage"])))
 	if String(class_data["name"]) == "Berserker" and float(player_hp) / float(player_max_hp) <= 0.4:
 		damage = int(round(float(damage) * 1.25))
 	var combo_bonus := 0.35 if combo_count >= 5 else (0.15 if combo_count >= 3 else 0.0)
@@ -629,8 +635,10 @@ func _try_skill() -> void:
 			continue
 		if player_position.distance_to(mob["pos"]) <= skill_radius:
 			var talent_bonus := _current_talent_bonus()
-			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0)) * float(talent_bonus["skill"])))
-			var critical_chance := minf(0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5 + float(spec_data.get("crit", 0.0)) + float(_current_talent_bonus()["crit"]), 0.30)
+			var passive := _current_passive_data()
+			var passive_skill_multiplier := clampf(float(passive.get("skill", 1.0)), 0.90, 1.18)
+			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0)) * passive_skill_multiplier * float(talent_bonus["skill"])))
+			var critical_chance := minf(0.30, 0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5 + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)))
 			if spec_name == "Executioner" and float(mob["hp"]) / maxf(1.0, float(mob["max_hp"])) <= 0.35:
 				damage = int(round(float(damage) * 1.35))
 				_add_floating_message("EXECUTE!", Vector2(mob["pos"]) + Vector2(0, -66), Color("#ff8b78"))
@@ -646,7 +654,8 @@ func _try_skill() -> void:
 				_add_floating_message("-%d" % damage, Vector2(mob["pos"]) + Vector2(0, -36), Color("#a8d8ef"))
 			mob["hp"] = int(mob["hp"]) - damage
 			if spec_name == "Soulweaver" or spec_name == "Grovekeeper" or spec_name == "Justicar":
-				var heal_amount := 7 if spec_name == "Soulweaver" else (6 if spec_name == "Grovekeeper" else 4)
+				var base_heal := 7 if spec_name == "Soulweaver" else (6 if spec_name == "Grovekeeper" else 4)
+				var heal_amount := base_heal + int(passive.get("heal", 0)) + int(talent_bonus["heal"])
 				var old_hp := player_hp
 				player_hp = mini(player_max_hp, player_hp + heal_amount)
 				if player_hp > old_hp:
@@ -656,10 +665,12 @@ func _try_skill() -> void:
 			mob["hit_flash"] = 0.18
 			combat_effects.append({"kind": "hit", "pos": Vector2(mob["pos"]), "life": 0.18, "duration": 0.18})
 			hit_any = true
-			ultimate_charge = minf(100.0, ultimate_charge + 15.0)
+			ultimate_charge = minf(100.0, ultimate_charge + 15.0 + float(passive.get("charge", 0.0)))
 			if int(mob["hp"]) <= 0:
 				_defeat_mob(mob)
 	if hit_any:
+		var passive_name := String(_current_passive_data().get("name", ""))
+		_add_floating_message("PASSIVE SKILL: %s" % passive_name, player_position + Vector2(0, -76), Color("#b8e8a0"))
 		_save_progress()
 	queue_redraw()
 
@@ -674,17 +685,20 @@ func _try_ultimate() -> void:
 	ultimate_charge = 0.0
 	var radius := float(ultimate["radius"])
 	var passive := _current_passive_data()
-	var power := float(ultimate["power"]) * float(passive.get("ultimate", 1.0))
+	var talent_bonus := _current_talent_bonus()
+	var power := float(ultimate["power"]) * clampf(float(passive.get("ultimate", 1.0)), 0.90, 1.12)
+	var passive_skill_multiplier := clampf(float(passive.get("skill", 1.0)), 0.90, 1.18)
 	var base_damage := float(70 + weapon_tier * 10 + weapon_enchant * 5)
 	combat_effects.append({"kind": "ultimate", "pos": player_position, "life": 0.72, "duration": 0.72})
 	_add_floating_message(String(ultimate["name"]) + "!", player_position + Vector2(0, -76), Color("#ffd28b"))
+	_add_floating_message("PASSIVE ULTIMATE: %s" % String(passive.get("name", "ASCENDANT")), player_position + Vector2(0, -96), Color("#b8e8a0"))
 	var hit_count := 0
 	for mob in mobs:
 		if not bool(mob.get("alive", false)):
 			continue
 		if player_position.distance_to(Vector2(mob["pos"])) > radius:
 			continue
-		var damage := int(round(base_damage * power * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0))))
+		var damage := int(round(base_damage * power * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0)) * passive_skill_multiplier * float(talent_bonus["skill"])))
 		if spec_name == "Executioner" and float(mob["hp"]) / maxf(1.0, float(mob["max_hp"])) <= 0.35:
 			damage = int(round(float(damage) * 1.5))
 		elif spec_name == "Bloodfury" and float(player_hp) / float(player_max_hp) <= 0.5:
@@ -696,7 +710,7 @@ func _try_ultimate() -> void:
 		hit_count += 1
 		if int(mob["hp"]) <= 0:
 			_defeat_mob(mob)
-	var heal_amount := int(ultimate["heal"]) + int(passive.get("heal", 0))
+	var heal_amount := int(ultimate["heal"]) + int(passive.get("heal", 0)) + int(talent_bonus["heal"])
 	if hit_count > 0 and heal_amount > 0:
 		var old_hp := player_hp
 		player_hp = mini(player_max_hp, player_hp + heal_amount)
