@@ -118,6 +118,8 @@ var potions := 0
 var relic_shards := 0
 var guardian_cores := 0
 var ancient_caches := 0
+var echo_shards := 0
+var echo_surge_time := 0.0
 var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
@@ -138,6 +140,9 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	elapsed += delta
+	echo_surge_time = maxf(echo_surge_time - delta, 0.0)
+	if echo_surge_time <= 0.0 and echo_shards >= 3:
+		_activate_echo_surge()
 	player_hit_flash = maxf(player_hit_flash - delta, 0.0)
 	dodge_time = maxf(dodge_time - delta, 0.0)
 	dodge_cooldown = maxf(dodge_cooldown - delta, 0.0)
@@ -629,6 +634,8 @@ func _try_attack() -> void:
 	var set_bonus := _current_equipment_set_bonus()
 	var legendary_affix := _current_legendary_affix()
 	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0)) * float(spec_data.get("damage", 1.0)) * passive_attack_multiplier * float(talent_bonus["damage"]) * float(set_bonus["damage"]) * float(legendary_affix["damage"])))
+	if echo_surge_time > 0.0:
+		damage = int(round(float(damage) * 1.12))
 	if String(class_data["name"]) == "Berserker" and float(player_hp) / float(player_max_hp) <= 0.4:
 		damage = int(round(float(damage) * 1.25))
 	var combo_bonus := 0.35 if combo_count >= 5 else (0.15 if combo_count >= 3 else 0.0)
@@ -675,6 +682,8 @@ func _try_skill() -> void:
 			var set_bonus := _current_equipment_set_bonus()
 			var legendary_affix := _current_legendary_affix()
 			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0)) * passive_skill_multiplier * float(talent_bonus["skill"]) * float(set_bonus["damage"]) * float(legendary_affix["damage"]) * float(legendary_affix["skill"])))
+			if echo_surge_time > 0.0:
+				damage = int(round(float(damage) * 1.12))
 			var critical_chance := minf(0.30, 0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5 + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)) + float(set_bonus["crit"]) + float(legendary_affix["crit"]))
 			if spec_name == "Executioner" and float(mob["hp"]) / maxf(1.0, float(mob["max_hp"])) <= 0.35:
 				damage = int(round(float(damage) * 1.35))
@@ -728,6 +737,8 @@ func _try_ultimate() -> void:
 	var set_bonus := _current_equipment_set_bonus()
 	var legendary_affix := _current_legendary_affix()
 	var base_damage := float(70 + weapon_tier * 10 + weapon_enchant * 5) * float(set_bonus["damage"]) * float(legendary_affix["damage"]) * float(legendary_affix["skill"])
+	if echo_surge_time > 0.0:
+		base_damage *= 1.12
 	combat_effects.append({"kind": "ultimate", "pos": player_position, "life": 0.72, "duration": 0.72})
 	_add_floating_message(String(ultimate["name"]) + "!", player_position + Vector2(0, -76), Color("#ffd28b"))
 	_show_passive_proc("PASSIVE ULTIMATE: %s" % String(passive.get("name", "ASCENDANT")), player_position, Color("#b8e8a0"))
@@ -772,6 +783,10 @@ func _defeat_mob(mob: Dictionary) -> void:
 	kills += 1
 	_spawn_loot_drop(mob["pos"], "coins", (35 + player_level * 3) if is_boss else (3 + player_level))
 	_spawn_loot_drop(mob["pos"] + Vector2(-15, 8), "herbs", 1 + int(kills % 2))
+	if is_boss:
+		_spawn_loot_drop(mob["pos"] + Vector2(0, -28), "echo", 3)
+	elif randf() < 0.24:
+		_spawn_loot_drop(mob["pos"] + Vector2(0, -20), "echo", 1)
 	if int(mob["xp"]) >= 28:
 		_spawn_loot_drop(mob["pos"] + Vector2(15, -8), "relic", 4 if is_boss else 1)
 	if is_boss:
@@ -796,6 +811,15 @@ func _defeat_mob(mob: Dictionary) -> void:
 		_gain_xp(100)
 		player_coins += 50
 	_save_progress()
+
+func _activate_echo_surge() -> void:
+	if echo_shards < 3 or echo_surge_time > 0.0:
+		return
+	echo_shards -= 3
+	echo_surge_time = 12.0
+	_show_passive_proc("WORLD ECHO RESONANCE  •  DAMAGE +12%", player_position, Color("#83e8e0"))
+	_save_progress()
+	queue_redraw()
 
 func _buy_weapon() -> void:
 	var cost := 25 + weapon_tier * 35
@@ -878,6 +902,12 @@ func _update_loot_drops(delta: float) -> void:
 					ancient_caches += amount
 					label = "ANCIENT CACHE ACQUIRED"
 					message_color = Color("#e7d49a")
+				"echo":
+					echo_shards += amount
+					label = "+%d WORLD ECHO" % amount
+					message_color = Color("#83e8e0")
+					if echo_surge_time <= 0.0:
+						_activate_echo_surge()
 			_add_floating_message(label, player_position + Vector2(0, -42), message_color)
 			loot_drops.remove_at(i)
 			_save_progress()
@@ -1028,7 +1058,7 @@ func _xp_for_next_level() -> int:
 
 func _save_progress() -> void:
 	var data := {
-		"save_version": 2,
+		"save_version": 3,
 		"level": player_level,
 		"talent_points": talent_points,
 		"talent_ranks": talent_ranks,
@@ -1047,6 +1077,7 @@ func _save_progress() -> void:
 		"relic_shards": relic_shards,
 		"guardian_cores": guardian_cores,
 		"ancient_caches": ancient_caches,
+		"echo_shards": echo_shards,
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
@@ -1128,6 +1159,7 @@ func _load_progress() -> void:
 	relic_shards = maxi(0, int(parsed.get("relic_shards", 0)))
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
+	echo_shards = clampi(int(parsed.get("echo_shards", 0)), 0, 999999)
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
 	player_max_hp = clampi(int(parsed.get("player_max_hp", 100)), 100, 100000)
@@ -1309,7 +1341,7 @@ func _draw_loot_drops() -> void:
 	for drop in loot_drops:
 		var p: Vector2 = drop["pos"]
 		var drop_type := String(drop["type"])
-		var color := Color("#e0bd68") if drop_type == "coins" else (Color("#8fbd75") if drop_type == "herbs" else (Color("#ff9877") if drop_type == "guardian_core" else (Color("#e7d49a") if drop_type == "ancient_cache" else Color("#b58be0"))))
+		var color := Color("#83e8e0") if drop_type == "echo" else (Color("#e0bd68") if drop_type == "coins" else (Color("#8fbd75") if drop_type == "herbs" else (Color("#ff9877") if drop_type == "guardian_core" else (Color("#e7d49a") if drop_type == "ancient_cache" else Color("#b58be0")))))
 		var pulse := 1.0 + 0.14 * sin(elapsed * 5.0 + float(p[0] + p[1]) * 0.03)
 		draw_circle(p + Vector2(0, 5), 9.0, Color(0.02, 0.025, 0.02, 0.32))
 		draw_circle(p, 7.0 * pulse, color)
@@ -1319,7 +1351,7 @@ func _draw_loot_drops() -> void:
 		elif drop_type == "ancient_cache":
 			draw_rect(Rect2(p - Vector2(8, 7), Vector2(16, 14)), Color("#9c7441"))
 			draw_rect(Rect2(p - Vector2(8, 7), Vector2(16, 14)), Color("#f0d58b"), false, 2.0)
-		var glyph := "G" if drop_type == "coins" else ("H" if drop_type == "herbs" else ("C" if drop_type == "guardian_core" else ("A" if drop_type == "ancient_cache" else "R")))
+		var glyph := "E" if drop_type == "echo" else ("G" if drop_type == "coins" else ("H" if drop_type == "herbs" else ("C" if drop_type == "guardian_core" else ("A" if drop_type == "ancient_cache" else "R"))))
 		draw_string(ThemeDB.fallback_font, p + Vector2(-3, 3), glyph, HORIZONTAL_ALIGNMENT_LEFT, 8, 8, Color("#22231d"))
 
 func _draw_combat_effects() -> void:
@@ -1465,6 +1497,8 @@ func _draw_hud() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(42, 144), "ARMOR reduces damage • SKILL cooldown %.1fs" % skill_cooldown, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 164), "HERBS %d   POTIONS %d   RELIC SHARDS %d" % [herbs, potions, relic_shards], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 202), "GUARDIAN CORES %d   ANCIENT CACHES %d" % [guardian_cores, ancient_caches], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e7bd9a"))
+	var echo_label := "ECHO SURGE %.1fs  •  +12%% DAMAGE" % echo_surge_time if echo_surge_time > 0.0 else "WORLD ECHOES %d / 3" % echo_shards
+	draw_string(ThemeDB.fallback_font, Vector2(42, 220), echo_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#83e8e0") if echo_surge_time > 0.0 else Color("#b0c9c1"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 184), "DMG %d  •  CRIT %d%%  •  ARMOR %d" % [20 + weapon_tier * 8 + weapon_enchant * 4, int(round(minf(0.08 + float(weapon_enchant) * 0.04, 0.24) * 100.0)), armor_tier * 2 + armor_enchant * 2], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d7c59f"))
 	var combo_bonus_percent := 35 if combo_count >= 5 else (15 if combo_count >= 3 else 0)
 	var combo_label := "COMBO x%d  •  +%d%% DAMAGE" % [combo_count, combo_bonus_percent] if combo_count > 0 else "COMBO: READY"
