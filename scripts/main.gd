@@ -14,6 +14,8 @@ const ANCIENT_CHEST_RANGE := 90.0
 const MEMORY_EXIT_POSITION := Vector2(1182.0, 374.0)
 const MEMORY_EXIT_RANGE := 88.0
 const SHATTERED_REACH_ENTRY_POSITION := Vector2(470.0, 568.0)
+const SHATTERED_BEACON_POSITION := Vector2(475.0, 564.0)
+const SHATTERED_BEACON_RANGE := 92.0
 const CODEX_BUTTON_RECT := Rect2(1114.0, 145.0, 146.0, 44.0)
 const RUNE_BUTTON_RECT := Rect2(516.0, 620.0, 248.0, 58.0)
 const CODEX_CLOSE_RECT := Rect2(914.0, 124.0, 82.0, 38.0)
@@ -143,10 +145,12 @@ var nearby_ruin_object := -1
 var nearby_hidden_gate := false
 var nearby_ancient_chest := false
 var nearby_memory_exit := false
+var nearby_shattered_beacon := false
 var hidden_passage_open := false
 var ancient_chest_claimed := false
 var shattered_reach_unlocked := false
 var shattered_reach_discovered := false
+var shattered_beacon_activated := false
 var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
@@ -203,6 +207,7 @@ func _process(delta: float) -> void:
 	nearby_hidden_gate = (codex_entries & 448) == 448 and player_position.distance_to(HIDDEN_GATE_POSITION) <= HIDDEN_GATE_RANGE
 	nearby_ancient_chest = hidden_passage_open and not ancient_chest_claimed and player_position.distance_to(ANCIENT_CHEST_POSITION) <= ANCIENT_CHEST_RANGE
 	nearby_memory_exit = memory_guardian_defeated and player_position.distance_to(MEMORY_EXIT_POSITION) <= MEMORY_EXIT_RANGE
+	nearby_shattered_beacon = shattered_reach_discovered and player_position.distance_to(SHATTERED_BEACON_POSITION) <= SHATTERED_BEACON_RANGE
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
 	if dodge_time > 0.0:
@@ -275,6 +280,8 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 			_interact_with_ancient_rune()
 		elif nearby_ancient_chest:
 			_claim_ancient_chest()
+		elif nearby_shattered_beacon:
+			_activate_shattered_beacon()
 		elif nearby_memory_exit:
 			_enter_shattered_reach()
 		elif nearby_hidden_gate:
@@ -904,7 +911,7 @@ func _toggle_codex() -> void:
 	queue_redraw()
 
 func _discover_codex_entry(entry_id: int) -> void:
-	if entry_id < 0 or entry_id > 11:
+	if entry_id < 0 or entry_id > 12:
 		return
 	var entry_bit := 1 << entry_id
 	if (codex_entries & entry_bit) != 0:
@@ -922,10 +929,11 @@ func _discover_codex_entry(entry_id: int) -> void:
 		"The Sealed Memory",
 		"The Hall Beneath",
 		"The Memory Guardian",
-		"The Shattered Reach"
+		"The Shattered Reach",
+		"The First Beacon"
 	]
-	var reward_xp := 200 if entry_id == 11 else (400 if entry_id == 10 else (150 if entry_id == 5 else (100 if entry_id == 4 else 20)))
-	var reward_coins := 100 if entry_id == 11 else (250 if entry_id == 10 else (75 if entry_id == 5 else (50 if entry_id == 4 else 10))
+	var reward_xp := 250 if entry_id == 12 else (200 if entry_id == 11 else (400 if entry_id == 10 else (150 if entry_id == 5 else (100 if entry_id == 4 else 20))))
+	var reward_coins := 125 if entry_id == 12 else (100 if entry_id == 11 else (250 if entry_id == 10 else (75 if entry_id == 5 else (50 if entry_id == 4 else 10))))
 	_gain_xp(reward_xp)
 	player_coins += reward_coins
 	_add_floating_message("CODEX FOUND: %s" % titles[entry_id], player_position + Vector2(0, -68), Color("#83e8e0"))
@@ -984,6 +992,21 @@ func _enter_shattered_reach() -> void:
 	_discover_codex_entry(11)
 	_add_floating_message("THE SHATTERED REACH", player_position + Vector2(0, -70), Color("#83e8e0"))
 	_add_floating_message("THE FIRST BEACON HAS GONE DARK", player_position + Vector2(0, -94), Color("#d7c59f"))
+	_save_progress()
+	queue_redraw()
+
+
+func _activate_shattered_beacon() -> void:
+	if not shattered_reach_unlocked or not shattered_reach_discovered:
+		_add_floating_message("THE BEACON IS BEYOND YOUR REACH", player_position + Vector2(0, -62), Color("#d7c59f"))
+		return
+	if shattered_beacon_activated:
+		_add_floating_message("THE FIRST BEACON IS ALREADY AWAKE", player_position + Vector2(0, -62), Color("#83e8e0"))
+		return
+	shattered_beacon_activated = true
+	_discover_codex_entry(12)
+	_add_floating_message("FIRST BEACON RESTORED", player_position + Vector2(0, -70), Color("#9dffe2"))
+	_add_floating_message("A LIGHT ANSWERS FROM THE FAR NORTH", player_position + Vector2(0, -94), Color("#ffd28b"))
 	_save_progress()
 	queue_redraw()
 
@@ -1322,6 +1345,7 @@ func _save_progress() -> void:
 		"memory_relic_owned": memory_relic_owned,
 		"shattered_reach_unlocked": shattered_reach_unlocked,
 		"shattered_reach_discovered": shattered_reach_discovered,
+		"shattered_beacon_activated": shattered_beacon_activated,
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
@@ -1404,7 +1428,7 @@ func _load_progress() -> void:
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
 	echo_shards = clampi(int(parsed.get("echo_shards", 0)), 0, 999999)
-	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 4095)
+	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 8191)
 	rune_studied = bool(parsed.get("rune_studied", false))
 	rune_activated = bool(parsed.get("rune_activated", false))
 	hidden_passage_open = bool(parsed.get("hidden_passage_open", rune_activated and (codex_entries & 448) == 448))
@@ -1413,6 +1437,7 @@ func _load_progress() -> void:
 	memory_relic_owned = bool(parsed.get("memory_relic_owned", memory_guardian_defeated))
 	shattered_reach_unlocked = bool(parsed.get("shattered_reach_unlocked", memory_guardian_defeated))
 	shattered_reach_discovered = bool(parsed.get("shattered_reach_discovered", false))
+	shattered_beacon_activated = bool(parsed.get("shattered_beacon_activated", false))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
 	player_max_hp = clampi(int(parsed.get("player_max_hp", 100)), 100, 100000)
@@ -1561,14 +1586,22 @@ func _draw_shattered_reach() -> void:
 		var shard_y := zone_rect.position.y + 35.0 + float((shard_index * 19) % 62)
 		draw_line(Vector2(shard_x, shard_y), Vector2(shard_x + 10.0, shard_y - 18.0), Color("#687f85"), 3.0)
 		draw_line(Vector2(shard_x + 10.0, shard_y - 18.0), Vector2(shard_x + 21.0, shard_y + 3.0), Color("#52676f"), 2.0)
-	var beacon_position := zone_rect.position + Vector2(125.0, 64.0)
-	var beacon_glow := Color("#83e8e0")
-	beacon_glow.a = 0.05 + 0.04 * sin(elapsed * 1.4)
-	draw_circle(beacon_position, 42.0, beacon_glow)
-	draw_rect(Rect2(beacon_position + Vector2(-9, -24), Vector2(18, 48)), Color("#4a5c60"))
-	draw_arc(beacon_position, 27.0, 0.0, TAU, 32, Color("#718c8e"), 2.0, true)
+	var beacon_position := SHATTERED_BEACON_POSITION
+	var beacon_glow := Color("#9dffe2") if shattered_beacon_activated else Color("#83e8e0")
+	beacon_glow.a = (0.18 + 0.08 * sin(elapsed * 2.0)) if shattered_beacon_activated else (0.05 + 0.04 * sin(elapsed * 1.4))
+	draw_circle(beacon_position, 42.0 if not shattered_beacon_activated else 58.0, beacon_glow)
+	if shattered_beacon_activated:
+		for ray_index in range(8):
+			var ray_angle := TAU * float(ray_index) / 8.0 + elapsed * 0.08
+			var ray_start := beacon_position + Vector2(cos(ray_angle), sin(ray_angle)) * 24.0
+			var ray_end := beacon_position + Vector2(cos(ray_angle), sin(ray_angle)) * 49.0
+			draw_line(ray_start, ray_end, Color("#b9ffe9"), 2.0)
+		draw_line(beacon_position + Vector2(0, -23), beacon_position + Vector2(0, -68), Color("#b9ffe9"), 3.0)
+		draw_circle(beacon_position + Vector2(0, -27), 5.0, Color("#e0fff5"))
+	draw_rect(Rect2(beacon_position + Vector2(-9, -24), Vector2(18, 48)), Color("#719b91") if shattered_beacon_activated else Color("#4a5c60"))
+	draw_arc(beacon_position, 27.0, 0.0, TAU, 32, Color("#b9ffe9") if shattered_beacon_activated else Color("#718c8e"), 2.0, true)
 	draw_string(ThemeDB.fallback_font, zone_rect.position + Vector2(22, 22), "THE SHATTERED REACH", HORIZONTAL_ALIGNMENT_LEFT, 208, 12, Color("#c3e0df"))
-	draw_string(ThemeDB.fallback_font, beacon_position + Vector2(-48, 47), "BEACON: DORMANT", HORIZONTAL_ALIGNMENT_LEFT, 120, 10, Color("#9bb5b7"))
+	draw_string(ThemeDB.fallback_font, beacon_position + Vector2(-48, 47), "BEACON: AWAKENED" if shattered_beacon_activated else "BEACON: DORMANT", HORIZONTAL_ALIGNMENT_LEFT, 140, 10, Color("#b9ffe9") if shattered_beacon_activated else Color("#9bb5b7"))
 
 
 func _draw_ancient_chest() -> void:
@@ -1943,12 +1976,14 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, -2), "POTION C/R", HORIZONTAL_ALIGNMENT_LEFT, 105, 12, Color("#e7dfc8"))
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, 15), "x%d / 3 herbs" % potions, HORIZONTAL_ALIGNMENT_LEFT, 105, 11, Color("#d7c59f"))
-	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest or nearby_memory_exit) and not codex_open:
+	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon) and not codex_open:
 		draw_rect(RUNE_BUTTON_RECT, Color(0.035, 0.12, 0.13, 0.96))
-		var interaction_color := Color("#83e8e0") if rune_nearby or nearby_ancient_chest or nearby_memory_exit else Color("#d7c59f")
+		var interaction_color := Color("#83e8e0") if rune_nearby or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon else Color("#d7c59f")
 		draw_rect(RUNE_BUTTON_RECT, interaction_color, false, 2.5)
 		var interaction_label := "RUNE AWAKENED" if rune_activated else ("ACTIVATE RUNE" if rune_studied and (codex_entries & 15) == 15 else "STUDY ANCIENT RUNE")
-		if nearby_ancient_chest and not rune_nearby:
+		if nearby_shattered_beacon and not rune_nearby:
+			interaction_label = "BEACON AWAKENED" if shattered_beacon_activated else "ACTIVATE BEACON"
+		elif nearby_ancient_chest and not rune_nearby:
 			interaction_label = "CLAIM ANCIENT CACHE"
 		elif nearby_memory_exit and not rune_nearby:
 			interaction_label = "ENTER SHATTERED REACH"
@@ -1968,7 +2003,7 @@ func _draw_hud() -> void:
 		draw_rect(CODEX_CLOSE_RECT, Color("#83e8e0"), false, 1.5)
 		draw_string(ThemeDB.fallback_font, CODEX_CLOSE_RECT.position + Vector2(14, 24), "CLOSE", HORIZONTAL_ALIGNMENT_LEFT, 64, 12, Color("#e0f7ee"))
 		draw_string(ThemeDB.fallback_font, Vector2(300, 187), "Collect traces from combat and ancient relics. Four clues reveal a hidden convergence.", HORIZONTAL_ALIGNMENT_LEFT, 680, 12, Color("#a9c9c2"))
-		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian", "The Shattered Reach"]
+		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian", "The Shattered Reach", "The First Beacon"]
 		var codex_hints: Array[String] = [
 			"A fragment remembers something its owner forgot.",
 			"Three echoes briefly become one living force.",
@@ -1981,7 +2016,8 @@ func _draw_hud() -> void:
 			"A sealed cache still responds to the rune's pulse.",
 		"Three relic traces and the awakened rune reveal the hall below.",
 			"An ancient will protects the hall. Its relic remembers every battle.",
-			"Beyond the hall, a broken road leads to the Shattered Reach. The first beacon is silent."
+			"Beyond the hall, a broken road leads to the Shattered Reach. The first beacon is silent.",
+			"The beacon has awakened. Its light points toward a distant signal beyond the shattered road."
 		]
 		var codex_found := 0
 		for entry_index in range(codex_titles.size()):
@@ -1989,7 +2025,7 @@ func _draw_hud() -> void:
 			if discovered:
 				codex_found += 1
 			var compact_codex := codex_titles.size() > 6
-			var row_spacing := 35.0 if codex_titles.size() > 9 else (39.0 if compact_codex else 52.0)
+			var row_spacing := 30.0 if codex_titles.size() > 12 else (35.0 if codex_titles.size() > 9 else (39.0 if compact_codex else 52.0))
 			var entry_y := 206.0 + float(entry_index) * row_spacing
 			draw_circle(Vector2(310, entry_y - 4.0), 6.0 if compact_codex else 9.0, Color("#83e8e0") if discovered else Color("#53615d"))
 			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y), "%02d  %s" % [entry_index + 1, codex_titles[entry_index] if discovered else "UNKNOWN TRACE"], HORIZONTAL_ALIGNMENT_LEFT, 620, 11 if codex_titles.size() > 9 else (12 if compact_codex else 14), Color("#e0f7ee") if discovered else Color("#9ba7a2"))
