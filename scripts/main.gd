@@ -769,7 +769,6 @@ func _try_attack() -> void:
 	var slash_direction := (Vector2(target["pos"]) - player_position).normalized()
 	combat_effects.append({"kind": "slash", "pos": player_position, "dir": slash_direction, "life": 0.20, "duration": 0.20})
 	var class_data := _current_class_data()
-	var spec_data := _current_specialization_data()
 	var talent_bonus := _current_talent_bonus()
 	var passive := _current_passive_data()
 	var passive_attack_multiplier := clampf(float(passive.get("attack", 1.0)), 0.90, 1.16)
