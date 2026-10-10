@@ -28,6 +28,8 @@ var player_hp := 100
 var player_level := 1
 var player_class_index := 0
 var specialization_index := 0
+var talent_points := 0
+var talent_ranks: Array[int] = [0, 0, 0]
 var player_xp := 0
 var player_coins := 0
 var kills := 0
@@ -117,6 +119,12 @@ func _input(event: InputEvent) -> void:
 			_cycle_class()
 		elif event.keycode == KEY_G:
 			_cycle_specialization()
+		elif event.keycode == KEY_1:
+			_spend_talent(0)
+		elif event.keycode == KEY_2:
+			_spend_talent(1)
+		elif event.keycode == KEY_3:
+			_spend_talent(2)
 	if event is InputEventScreenTouch:
 		if event.pressed and event.position.x < WORLD_SIZE.x * 0.48 and event.position.y > WORLD_SIZE.y * 0.48:
 			joystick_active = true
@@ -132,6 +140,10 @@ func _input(event: InputEvent) -> void:
 		_update_joystick(event.position)
 
 func _handle_action_touch(screen_position: Vector2) -> void:
+	for branch in range(3):
+		if screen_position.distance_to(_talent_button_center(branch)) <= 68.0:
+			_spend_talent(branch)
+			return
 	if screen_position.distance_to(_class_button_center()) <= 76.0:
 		_cycle_class()
 	elif screen_position.distance_to(_specialization_button_center()) <= 76.0:
@@ -164,6 +176,125 @@ func _specialization_button_center() -> Vector2:
 
 func _current_class_data() -> Dictionary:
 	return CLASS_DATA[clampi(player_class_index, 0, CLASS_DATA.size() - 1)]
+
+func _current_specialization_data() -> Dictionary:
+	var class_data := _current_class_data()
+	var class_name := String(class_data["name"])
+	var spec_name := String((class_data["specs"] as Array)[specialization_index])
+	var data := {"damage": 1.0, "crit": 0.0, "armor": 0, "skill": 1.0, "range": 0.0, "heal": 0, "dodge_cd": 0.0, "cooldown": 0.0}
+	match spec_name:
+		"Warden":
+			data["armor"] = 2
+			data["heal"] = 2
+		"Weaponmaster":
+			data["damage"] = 1.12
+			data["cooldown"] = -0.25
+		"Champion":
+			data["damage"] = 1.08
+			data["skill"] = 1.15
+		"Reaver":
+			data["damage"] = 1.15
+		"Bloodfury":
+			data["damage"] = 1.22 if float(player_hp) / float(player_max_hp) <= 0.5 else 1.0
+			data["heal"] = 2
+		"Juggernaut":
+			data["armor"] = 4
+			data["skill"] = 0.9
+		"Shadow":
+			data["crit"] = 0.10
+			data["dodge_cd"] = -0.55
+		"Executioner":
+			data["damage"] = 1.2
+			data["crit"] = 0.04
+		"Phantom":
+			data["dodge_cd"] = -0.8
+			data["skill"] = 1.15
+		"Pathfinder":
+			data["range"] = 28.0
+			data["dodge_cd"] = -0.25
+		"Beastmaster":
+			data["heal"] = 3
+			data["skill"] = 1.1
+		"Deadeye":
+			data["crit"] = 0.12
+			data["range"] = 12.0
+		"Elementalist":
+			data["skill"] = 1.4
+			data["cooldown"] = 0.8
+		"Spellblade":
+			data["damage"] = 1.12
+			data["skill"] = 1.12
+		"Archmage":
+			data["skill"] = 1.55
+			data["cooldown"] = 1.4
+		"Lich":
+			data["skill"] = 1.22
+			data["heal"] = 5
+		"Soulweaver":
+			data["heal"] = 10
+			data["armor"] = 1
+		"Gravecaller":
+			data["skill"] = 1.28
+			data["cooldown"] = -0.4
+		"Inquisitor":
+			data["damage"] = 1.16
+			data["skill"] = 1.12
+		"Justicar":
+			data["armor"] = 5
+			data["heal"] = 4
+		"Sunkeeper":
+			data["skill"] = 1.3
+			data["heal"] = 3
+		"Shapebinder":
+			data["armor"] = 2
+			data["damage"] = 1.08
+		"Stormcaller":
+			data["skill"] = 1.35
+			data["crit"] = 0.03
+		"Grovekeeper":
+			data["heal"] = 8
+			data["armor"] = 1
+		"Way of the Fist":
+			data["damage"] = 1.15
+			data["cooldown"] = -0.4
+		"Way of the Gale":
+			data["dodge_cd"] = -0.9
+			data["crit"] = 0.06
+		"Way of Balance":
+			data["armor"] = 2
+			data["heal"] = 4
+		"Tinkerer":
+			data["cooldown"] = -0.8
+			data["skill"] = 1.12
+		"Artillerist":
+			data["skill"] = 1.42
+			data["range"] = 10.0
+		"Aegis Smith":
+			data["armor"] = 3
+			data["heal"] = 2
+	return data
+
+func _current_talent_bonus() -> Dictionary:
+	return {
+		"damage": 1.0 + float(talent_ranks[0]) * 0.05,
+		"armor": talent_ranks[1] * 1,
+		"skill": 1.0 + float(talent_ranks[2]) * 0.06,
+		"crit": float(talent_ranks[0]) * 0.005,
+		"heal": talent_ranks[2]
+	}
+
+func _spend_talent(branch: int) -> void:
+	if talent_points <= 0 or branch < 0 or branch >= talent_ranks.size() or talent_ranks[branch] >= 5:
+		_add_floating_message("NO TALENT POINTS / MAX RANK", player_position + Vector2(0, -56), Color("#e6b2a5"))
+		return
+	talent_points -= 1
+	talent_ranks[branch] += 1
+	_add_floating_message("TALENT RANK %d" % talent_ranks[branch], player_position + Vector2(0, -58), Color("#b8e8a0"))
+	_save_progress()
+	queue_redraw()
+
+func _talent_button_center(branch: int) -> Vector2:
+	return Vector2(430.0 + float(branch) * 145.0, 390.0)
 
 func _cycle_class() -> void:
 	player_class_index = (player_class_index + 1) % CLASS_DATA.size()
@@ -224,7 +355,8 @@ func _try_dodge() -> void:
 		desired_direction = Vector2.RIGHT
 	dodge_direction = desired_direction.normalized()
 	dodge_time = 0.42
-	dodge_cooldown = float(_current_class_data().get("dodge_cd", 2.8))
+	var spec_data := _current_specialization_data()
+	dodge_cooldown = maxf(0.8, float(_current_class_data().get("dodge_cd", 2.8)) + float(spec_data.get("dodge_cd", 0.0)))
 	combat_effects.append({"kind": "dodge", "pos": player_position, "dir": dodge_direction, "life": 0.30, "duration": 0.30})
 	_add_floating_message("DODGE!", player_position + Vector2(0, -48), Color("#9fe6ef"))
 	queue_redraw()
@@ -287,7 +419,7 @@ func _update_mobs(delta: float) -> void:
 						if dodge_time > 0.0:
 							_add_floating_message("SLAM DODGED!", player_position + Vector2(0, -52), Color("#9fe6ef"))
 						else:
-							var class_armor_bonus := int(_current_class_data().get("armor", 0))
+							var class_armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"])
 						var slam_damage := maxi(1, (34 if guardian_enraged else 28) - armor_tier * 2 - armor_enchant * 2 - class_armor_bonus)
 							player_hp -= slam_damage
 							player_hit_flash = 0.28
@@ -326,7 +458,7 @@ func _update_mobs(delta: float) -> void:
 					if dodge_time > 0.0:
 						_add_floating_message("DODGED!", player_position + Vector2(0, -42), Color("#9fe6ef"))
 					else:
-						var class_armor_bonus := int(_current_class_data().get("armor", 0))
+						var class_armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"])
 						var incoming_damage := maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2 - class_armor_bonus)
 						player_hp -= incoming_damage
 						player_hit_flash = 0.22
@@ -347,7 +479,8 @@ func _try_attack() -> void:
 		return
 	attack_cooldown = 0.42
 	var target_index := -1
-	var closest_distance := float(_current_class_data().get("range", 88.0))
+	var spec_data := _current_specialization_data()
+	var closest_distance := float(_current_class_data().get("range", 88.0)) + float(spec_data.get("range", 0.0))
 	for i in range(mobs.size()):
 		var mob: Dictionary = mobs[i]
 		if not mob["alive"]:
@@ -368,12 +501,14 @@ func _try_attack() -> void:
 	var slash_direction := (Vector2(target["pos"]) - player_position).normalized()
 	combat_effects.append({"kind": "slash", "pos": player_position, "dir": slash_direction, "life": 0.20, "duration": 0.20})
 	var class_data := _current_class_data()
-	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0))))
+	var spec_data := _current_specialization_data()
+	var talent_bonus := _current_talent_bonus()
+	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0)) * float(spec_data.get("damage", 1.0)) * float(talent_bonus["damage"])))
 	if String(class_data["name"]) == "Berserker" and float(player_hp) / float(player_max_hp) <= 0.4:
 		damage = int(round(float(damage) * 1.25))
 	var combo_bonus := 0.35 if combo_count >= 5 else (0.15 if combo_count >= 3 else 0.0)
 	damage = int(round(float(damage) * (1.0 + combo_bonus)))
-	var critical_chance := minf(0.08 + float(weapon_enchant) * 0.04 + float(class_data.get("crit", 0.0)), 0.32)
+	var critical_chance := minf(0.08 + float(weapon_enchant) * 0.04 + float(class_data.get("crit", 0.0)) + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]), 0.38)
 	var is_critical := randf() < critical_chance
 	if is_critical:
 		damage = int(round(float(damage) * 1.75))
@@ -393,15 +528,17 @@ func _try_attack() -> void:
 func _try_skill() -> void:
 	if skill_cooldown > 0.0:
 		return
-	skill_cooldown = 5.0
+	var class_data := _current_class_data()
+	var spec_data := _current_specialization_data()
+	skill_cooldown = maxf(1.8, 5.0 + float(spec_data.get("cooldown", 0.0)) - float(talent_ranks[2]) * 0.12)
 	combat_effects.append({"kind": "pulse", "pos": player_position, "life": 0.34, "duration": 0.34})
 	var hit_any := false
 	for mob in mobs:
 		if not mob["alive"]:
 			continue
 		if player_position.distance_to(mob["pos"]) <= 150.0:
-			var class_data := _current_class_data()
-			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0))))
+			var talent_bonus := _current_talent_bonus()
+			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0)) * float(talent_bonus["skill"])))
 			var critical_chance := minf(0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5, 0.24)
 			var is_critical := randf() < critical_chance
 			if is_critical:
@@ -442,7 +579,7 @@ func _defeat_mob(mob: Dictionary) -> void:
 	_gain_xp(int(mob["xp"]))
 	if not is_boss:
 		_ensure_guardian_encounter()
-	var class_kill_heal := int(_current_class_data().get("kill_heal", 0))
+	var class_kill_heal := int(_current_class_data().get("kill_heal", 0)) + int(_current_specialization_data().get("heal", 0)) + int(_current_talent_bonus()["heal"])
 	if class_kill_heal > 0:
 		player_hp = mini(player_max_hp, player_hp + class_kill_heal)
 		_add_floating_message("CLASS HEAL +%d" % class_kill_heal, player_position + Vector2(0, -46), Color("#a8e6a0"))
@@ -661,6 +798,9 @@ func _process_level_ups() -> void:
 		player_xp -= _xp_for_next_level()
 		player_level += 1
 		player_max_hp += 12
+		if player_level % 2 == 0:
+			talent_points += 1
+			_add_floating_message("TALENT POINT +1", player_position + Vector2(0, -88), Color("#b8e8a0"))
 		player_hp = player_max_hp
 		_add_floating_message("LEVEL UP!  %d" % player_level, player_position + Vector2(0, -68), Color("#f2d58b"))
 
@@ -670,6 +810,8 @@ func _xp_for_next_level() -> int:
 func _save_progress() -> void:
 	var data := {
 		"level": player_level,
+		"talent_points": talent_points,
+		"talent_ranks": talent_ranks,
 		"class_index": player_class_index,
 		"specialization_index": specialization_index,
 		"xp": player_xp,
@@ -704,6 +846,11 @@ func _load_progress() -> void:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return
 	player_level = maxi(1, int(parsed.get("level", 1)))
+	talent_points = maxi(0, int(parsed.get("talent_points", 0)))
+	var saved_talents = parsed.get("talent_ranks", [0, 0, 0])
+	if saved_talents is Array and saved_talents.size() >= 3:
+		for talent_index in range(3):
+			talent_ranks[talent_index] = clampi(int(saved_talents[talent_index]), 0, 5)
 	player_class_index = clampi(int(parsed.get("class_index", 0)), 0, CLASS_DATA.size() - 1)
 	var saved_class_specs: Array = CLASS_DATA[player_class_index]["specs"]
 	specialization_index = clampi(int(parsed.get("specialization_index", 0)), 0, saved_class_specs.size() - 1)
@@ -1043,6 +1190,15 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(spec_center - Vector2(130, 22), Vector2(260, 44)), Color("#8eb6c5"), false, 2.0)
 	var current_specs: Array = current_class["specs"]
 	draw_string(ThemeDB.fallback_font, spec_center + Vector2(-118, 4), "SPEC: %s  [G]" % String(current_specs[specialization_index]), HORIZONTAL_ALIGNMENT_LEFT, 240, 12, Color("#d7e8ed"))
+	var talent_titles: Array[String] = ["OFFENSE", "DEFENSE", "UTILITY"]
+	for branch in range(3):
+		var talent_center := _talent_button_center(branch)
+		var talent_color := Color("#c96c59") if branch == 0 else (Color("#7aabc0") if branch == 1 else Color("#9bc58a"))
+		draw_rect(Rect2(talent_center - Vector2(66, 22), Vector2(132, 44)), Color(0.07, 0.09, 0.10, 0.94))
+		draw_rect(Rect2(talent_center - Vector2(66, 22), Vector2(132, 44)), talent_color, false, 2.0)
+		draw_string(ThemeDB.fallback_font, talent_center + Vector2(-58, -2), "%s %d/5" % [talent_titles[branch], talent_ranks[branch]], HORIZONTAL_ALIGNMENT_LEFT, 120, 11, Color("#e7dfc8"))
+		draw_string(ThemeDB.fallback_font, talent_center + Vector2(-58, 14), "KEY %d" % (branch + 1), HORIZONTAL_ALIGNMENT_LEFT, 120, 9, Color("#d7c59f"))
+	draw_string(ThemeDB.fallback_font, Vector2(640, 432), "TALENT POINTS: %d" % talent_points, HORIZONTAL_ALIGNMENT_CENTER, 280, 13, Color("#b8e8a0") if talent_points > 0 else Color("#c5cfba"))
 	var forge_weapon_center := _forge_weapon_button_center()
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color("#c49a62"), false, 2.0)
