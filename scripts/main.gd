@@ -4,6 +4,18 @@ const WORLD_SIZE := Vector2(1280.0, 720.0)
 const JOYSTICK_CENTER := Vector2(112.0, 600.0)
 const JOYSTICK_RADIUS := 68.0
 const PLAYER_SPEED := 245.0
+const CLASS_DATA := [
+	{"name": "Warrior", "specs": ["Warden", "Weaponmaster", "Champion"], "damage": 1.08, "crit": 0.0, "armor": 2, "skill": 1.0, "range": 88.0, "kill_heal": 0, "dodge_cd": 2.8},
+	{"name": "Berserker", "specs": ["Reaver", "Bloodfury", "Juggernaut"], "damage": 1.12, "crit": 0.0, "armor": 0, "skill": 1.0, "range": 88.0, "kill_heal": 0, "dodge_cd": 2.8},
+	{"name": "Assassin", "specs": ["Shadow", "Executioner", "Phantom"], "damage": 1.0, "crit": 0.08, "armor": 0, "skill": 1.0, "range": 88.0, "kill_heal": 0, "dodge_cd": 2.5},
+	{"name": "Ranger", "specs": ["Pathfinder", "Beastmaster", "Deadeye"], "damage": 1.0, "crit": 0.03, "armor": 0, "skill": 1.0, "range": 108.0, "kill_heal": 0, "dodge_cd": 2.8},
+	{"name": "Mage", "specs": ["Elementalist", "Spellblade", "Archmage"], "damage": 1.0, "crit": 0.0, "armor": 0, "skill": 1.25, "range": 88.0, "kill_heal": 0, "dodge_cd": 2.8},
+	{"name": "Necromancer", "specs": ["Lich", "Soulweaver", "Gravecaller"], "damage": 1.0, "crit": 0.0, "armor": 0, "skill": 1.1, "range": 88.0, "kill_heal": 6, "dodge_cd": 2.8},
+	{"name": "Paladin", "specs": ["Inquisitor", "Justicar", "Sunkeeper"], "damage": 1.04, "crit": 0.0, "armor": 3, "skill": 1.0, "range": 88.0, "kill_heal": 3, "dodge_cd": 2.8},
+	{"name": "Druid", "specs": ["Shapebinder", "Stormcaller", "Grovekeeper"], "damage": 1.0, "crit": 0.0, "armor": 1, "skill": 1.15, "range": 88.0, "kill_heal": 4, "dodge_cd": 2.8},
+	{"name": "Monk", "specs": ["Way of the Fist", "Way of the Gale", "Way of Balance"], "damage": 1.06, "crit": 0.03, "armor": 1, "skill": 1.0, "range": 88.0, "kill_heal": 0, "dodge_cd": 2.0},
+	{"name": "Engineer", "specs": ["Tinkerer", "Artillerist", "Aegis Smith"], "damage": 1.05, "crit": 0.0, "armor": 1, "skill": 1.08, "range": 88.0, "kill_heal": 0, "dodge_cd": 2.8}
+]
 
 var player_position: Vector2 = WORLD_SIZE * 0.5
 var move_vector: Vector2 = Vector2.ZERO
@@ -14,6 +26,8 @@ var elapsed := 0.0
 var player_max_hp := 100
 var player_hp := 100
 var player_level := 1
+var player_class_index := 0
+var specialization_index := 0
 var player_xp := 0
 var player_coins := 0
 var kills := 0
@@ -99,6 +113,10 @@ func _input(event: InputEvent) -> void:
 			_craft_armor_enchant()
 		elif event.keycode == KEY_V:
 			_try_dodge()
+		elif event.keycode == KEY_TAB:
+			_cycle_class()
+		elif event.keycode == KEY_G:
+			_cycle_specialization()
 	if event is InputEventScreenTouch:
 		if event.pressed and event.position.x < WORLD_SIZE.x * 0.48 and event.position.y > WORLD_SIZE.y * 0.48:
 			joystick_active = true
@@ -114,7 +132,11 @@ func _input(event: InputEvent) -> void:
 		_update_joystick(event.position)
 
 func _handle_action_touch(screen_position: Vector2) -> void:
-	if screen_position.distance_to(_attack_button_center()) <= 58.0:
+	if screen_position.distance_to(_class_button_center()) <= 76.0:
+		_cycle_class()
+	elif screen_position.distance_to(_specialization_button_center()) <= 76.0:
+		_cycle_specialization()
+	elif screen_position.distance_to(_attack_button_center()) <= 58.0:
 		_try_attack()
 	elif screen_position.distance_to(_skill_button_center()) <= 58.0:
 		_try_skill()
@@ -133,6 +155,31 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 		_craft_armor_enchant()
 	elif screen_position.distance_to(_dodge_button_center()) <= 50.0:
 		_try_dodge()
+
+func _class_button_center() -> Vector2:
+	return Vector2(640.0, 242.0)
+
+func _specialization_button_center() -> Vector2:
+	return Vector2(640.0, 302.0)
+
+func _current_class_data() -> Dictionary:
+	return CLASS_DATA[clampi(player_class_index, 0, CLASS_DATA.size() - 1)]
+
+func _cycle_class() -> void:
+	player_class_index = (player_class_index + 1) % CLASS_DATA.size()
+	specialization_index = 0
+	var class_data := _current_class_data()
+	_add_floating_message("CLASS: %s" % String(class_data["name"]), player_position + Vector2(0, -72), Color("#c6b4f2"))
+	_save_progress()
+	queue_redraw()
+
+func _cycle_specialization() -> void:
+	var class_data := _current_class_data()
+	var specs: Array = class_data["specs"]
+	specialization_index = (specialization_index + 1) % specs.size()
+	_add_floating_message("SPEC: %s" % String(specs[specialization_index]), player_position + Vector2(0, -72), Color("#c6b4f2"))
+	_save_progress()
+	queue_redraw()
 
 func _attack_button_center() -> Vector2:
 	return Vector2(WORLD_SIZE.x - 100.0, WORLD_SIZE.y - 110.0)
@@ -177,7 +224,7 @@ func _try_dodge() -> void:
 		desired_direction = Vector2.RIGHT
 	dodge_direction = desired_direction.normalized()
 	dodge_time = 0.42
-	dodge_cooldown = 2.8
+	dodge_cooldown = float(_current_class_data().get("dodge_cd", 2.8))
 	combat_effects.append({"kind": "dodge", "pos": player_position, "dir": dodge_direction, "life": 0.30, "duration": 0.30})
 	_add_floating_message("DODGE!", player_position + Vector2(0, -48), Color("#9fe6ef"))
 	queue_redraw()
@@ -240,7 +287,8 @@ func _update_mobs(delta: float) -> void:
 						if dodge_time > 0.0:
 							_add_floating_message("SLAM DODGED!", player_position + Vector2(0, -52), Color("#9fe6ef"))
 						else:
-							var slam_damage := maxi(1, (34 if guardian_enraged else 28) - armor_tier * 2 - armor_enchant * 2)
+							var class_armor_bonus := int(_current_class_data().get("armor", 0))
+						var slam_damage := maxi(1, (34 if guardian_enraged else 28) - armor_tier * 2 - armor_enchant * 2 - class_armor_bonus)
 							player_hp -= slam_damage
 							player_hit_flash = 0.28
 							_add_floating_message("SLAM -%d" % slam_damage, player_position + Vector2(0, -52), Color("#ff8d69"))
@@ -278,7 +326,8 @@ func _update_mobs(delta: float) -> void:
 					if dodge_time > 0.0:
 						_add_floating_message("DODGED!", player_position + Vector2(0, -42), Color("#9fe6ef"))
 					else:
-						var incoming_damage := maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2)
+						var class_armor_bonus := int(_current_class_data().get("armor", 0))
+						var incoming_damage := maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2 - class_armor_bonus)
 						player_hp -= incoming_damage
 						player_hit_flash = 0.22
 						_add_floating_message("-%d" % incoming_damage, player_position + Vector2(0, -35), Color("#f28f82"))
@@ -298,7 +347,7 @@ func _try_attack() -> void:
 		return
 	attack_cooldown = 0.42
 	var target_index := -1
-	var closest_distance := 88.0
+	var closest_distance := float(_current_class_data().get("range", 88.0))
 	for i in range(mobs.size()):
 		var mob: Dictionary = mobs[i]
 		if not mob["alive"]:
@@ -318,10 +367,13 @@ func _try_attack() -> void:
 		_add_floating_message("COMBO x5! +35%", player_position + Vector2(0, -68), Color("#ffd56f"))
 	var slash_direction := (Vector2(target["pos"]) - player_position).normalized()
 	combat_effects.append({"kind": "slash", "pos": player_position, "dir": slash_direction, "life": 0.20, "duration": 0.20})
-	var damage := 20 + weapon_tier * 8 + weapon_enchant * 4
+	var class_data := _current_class_data()
+	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0))))
+	if String(class_data["name"]) == "Berserker" and float(player_hp) / float(player_max_hp) <= 0.4:
+		damage = int(round(float(damage) * 1.25))
 	var combo_bonus := 0.35 if combo_count >= 5 else (0.15 if combo_count >= 3 else 0.0)
 	damage = int(round(float(damage) * (1.0 + combo_bonus)))
-	var critical_chance := minf(0.08 + float(weapon_enchant) * 0.04, 0.24)
+	var critical_chance := minf(0.08 + float(weapon_enchant) * 0.04 + float(class_data.get("crit", 0.0)), 0.32)
 	var is_critical := randf() < critical_chance
 	if is_critical:
 		damage = int(round(float(damage) * 1.75))
@@ -348,8 +400,9 @@ func _try_skill() -> void:
 		if not mob["alive"]:
 			continue
 		if player_position.distance_to(mob["pos"]) <= 150.0:
-			var damage := 35 + weapon_tier * 5 + weapon_enchant * 3
-			var critical_chance := minf(0.05 + float(weapon_enchant) * 0.03, 0.20)
+			var class_data := _current_class_data()
+			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0))))
+			var critical_chance := minf(0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5, 0.24)
 			var is_critical := randf() < critical_chance
 			if is_critical:
 				damage = int(round(float(damage) * 1.5))
@@ -389,6 +442,10 @@ func _defeat_mob(mob: Dictionary) -> void:
 	_gain_xp(int(mob["xp"]))
 	if not is_boss:
 		_ensure_guardian_encounter()
+	var class_kill_heal := int(_current_class_data().get("kill_heal", 0))
+	if class_kill_heal > 0:
+		player_hp = mini(player_max_hp, player_hp + class_kill_heal)
+		_add_floating_message("CLASS HEAL +%d" % class_kill_heal, player_position + Vector2(0, -46), Color("#a8e6a0"))
 	if kills >= 3 and not quest_reward_claimed:
 		quest_reward_claimed = true
 		player_xp += 60
@@ -613,6 +670,8 @@ func _xp_for_next_level() -> int:
 func _save_progress() -> void:
 	var data := {
 		"level": player_level,
+		"class_index": player_class_index,
+		"specialization_index": specialization_index,
 		"xp": player_xp,
 		"coins": player_coins,
 		"kills": kills,
@@ -645,6 +704,9 @@ func _load_progress() -> void:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return
 	player_level = maxi(1, int(parsed.get("level", 1)))
+	player_class_index = clampi(int(parsed.get("class_index", 0)), 0, CLASS_DATA.size() - 1)
+	var saved_class_specs: Array = CLASS_DATA[player_class_index]["specs"]
+	specialization_index = clampi(int(parsed.get("specialization_index", 0)), 0, saved_class_specs.size() - 1)
 	player_xp = maxi(0, int(parsed.get("xp", 0)))
 	player_coins = maxi(0, int(parsed.get("coins", 0)))
 	kills = maxi(0, int(parsed.get("kills", 0)))
@@ -971,6 +1033,16 @@ func _draw_hud() -> void:
 	var combo_label := "COMBO x%d  •  +%d%% DAMAGE" % [combo_count, combo_bonus_percent] if combo_count > 0 else "COMBO: READY"
 	var combo_color := Color("#ffd56f") if combo_count >= 5 else (Color("#b8e8a0") if combo_count >= 3 else Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(465, 102), combo_label, HORIZONTAL_ALIGNMENT_CENTER, 350, 15, combo_color)
+	var class_center := _class_button_center()
+	draw_rect(Rect2(class_center - Vector2(100, 24), Vector2(200, 48)), Color(0.12, 0.10, 0.18, 0.92))
+	draw_rect(Rect2(class_center - Vector2(100, 24), Vector2(200, 48)), Color("#b9a4e6"), false, 2.0)
+	var current_class := _current_class_data()
+	draw_string(ThemeDB.fallback_font, class_center + Vector2(-88, 5), "CLASS: %s  [TAB]" % String(current_class["name"]), HORIZONTAL_ALIGNMENT_LEFT, 180, 13, Color("#e8dcff"))
+	var spec_center := _specialization_button_center()
+	draw_rect(Rect2(spec_center - Vector2(130, 22), Vector2(260, 44)), Color(0.10, 0.14, 0.18, 0.92))
+	draw_rect(Rect2(spec_center - Vector2(130, 22), Vector2(260, 44)), Color("#8eb6c5"), false, 2.0)
+	var current_specs: Array = current_class["specs"]
+	draw_string(ThemeDB.fallback_font, spec_center + Vector2(-118, 4), "SPEC: %s  [G]" % String(current_specs[specialization_index]), HORIZONTAL_ALIGNMENT_LEFT, 240, 12, Color("#d7e8ed"))
 	var forge_weapon_center := _forge_weapon_button_center()
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color("#c49a62"), false, 2.0)
