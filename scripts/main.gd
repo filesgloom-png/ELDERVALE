@@ -7,6 +7,10 @@ const ANCIENT_RUNE_POSITION := Vector2(914.0, 296.0)
 const RUNE_INTERACTION_RANGE := 108.0
 const RUIN_OBJECT_POSITIONS := [Vector2(754.0, 328.0), Vector2(978.0, 388.0), Vector2(1090.0, 304.0)]
 const RUIN_OBJECT_RANGE := 92.0
+const HIDDEN_GATE_POSITION := Vector2(1118.0, 282.0)
+const HIDDEN_GATE_RANGE := 96.0
+const ANCIENT_CHEST_POSITION := Vector2(1110.0, 396.0)
+const ANCIENT_CHEST_RANGE := 90.0
 const CODEX_BUTTON_RECT := Rect2(1114.0, 145.0, 146.0, 44.0)
 const RUNE_BUTTON_RECT := Rect2(516.0, 620.0, 248.0, 58.0)
 const CODEX_CLOSE_RECT := Rect2(914.0, 124.0, 82.0, 38.0)
@@ -133,6 +137,10 @@ var rune_studied := false
 var rune_activated := false
 var rune_nearby := false
 var nearby_ruin_object := -1
+var nearby_hidden_gate := false
+var nearby_ancient_chest := false
+var hidden_passage_open := false
+var ancient_chest_claimed := false
 var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
@@ -183,6 +191,8 @@ func _process(delta: float) -> void:
 		if ruin_distance <= closest_ruin_distance:
 			closest_ruin_distance = ruin_distance
 			nearby_ruin_object = ruin_index
+	nearby_hidden_gate = not hidden_passage_open and (codex_entries & 448) == 448 and player_position.distance_to(HIDDEN_GATE_POSITION) <= HIDDEN_GATE_RANGE
+	nearby_ancient_chest = hidden_passage_open and not ancient_chest_claimed and player_position.distance_to(ANCIENT_CHEST_POSITION) <= ANCIENT_CHEST_RANGE
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
 	if dodge_time > 0.0:
@@ -253,6 +263,10 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 	if RUNE_BUTTON_RECT.has_point(screen_position):
 		if rune_nearby:
 			_interact_with_ancient_rune()
+		elif nearby_ancient_chest:
+			_claim_ancient_chest()
+		elif nearby_hidden_gate:
+			_interact_with_hidden_gate()
 		elif nearby_ruin_object >= 0:
 			_inspect_ruin_object(nearby_ruin_object)
 		return
@@ -859,7 +873,7 @@ func _toggle_codex() -> void:
 	queue_redraw()
 
 func _discover_codex_entry(entry_id: int) -> void:
-	if entry_id < 0 or entry_id > 8:
+	if entry_id < 0 or entry_id > 9:
 		return
 	var entry_bit := 1 << entry_id
 	if (codex_entries & entry_bit) != 0:
@@ -874,7 +888,8 @@ func _discover_codex_entry(entry_id: int) -> void:
 		"The Rune of Convergence",
 		"The Watchstone Road",
 		"The Pilgrim's Oath",
-		"The Sealed Memory"
+		"The Sealed Memory",
+		"The Hall Beneath"
 	]
 	var reward_xp := 150 if entry_id == 5 else (100 if entry_id == 4 else 20)
 	var reward_coins := 75 if entry_id == 5 else (50 if entry_id == 4 else 10)
@@ -905,6 +920,39 @@ func _interact_with_ancient_rune() -> void:
 	rune_activated = true
 	_discover_codex_entry(5)
 	_add_floating_message("ANCIENT RUNE ACTIVATED", ANCIENT_RUNE_POSITION + Vector2(0, -54), Color("#83e8e0"))
+	_update_hidden_passage_unlock()
+	_save_progress()
+	queue_redraw()
+
+func _update_hidden_passage_unlock() -> void:
+	if hidden_passage_open or not rune_activated or (codex_entries & 448) != 448:
+		return
+	hidden_passage_open = true
+	_discover_codex_entry(9)
+	_add_floating_message("THE HIDDEN PASSAGE OPENS", HIDDEN_GATE_POSITION + Vector2(0, -42), Color("#83e8e0"))
+	_add_floating_message("A forgotten hall stirs beyond the stone", HIDDEN_GATE_POSITION + Vector2(0, -64), Color("#d7c59f"))
+	_save_progress()
+	queue_redraw()
+
+func _interact_with_hidden_gate() -> void:
+	if hidden_passage_open:
+		player_position = Vector2(1110.0, 320.0)
+		_add_floating_message("ENTERED THE ANCIENT HALL", player_position + Vector2(0, -58), Color("#83e8e0"))
+		queue_redraw()
+		return
+	_add_floating_message("THE GATE NEEDS THE AWAKENED RUNE AND THREE RELIC TRACES", player_position + Vector2(0, -68), Color("#d7c59f"))
+
+func _claim_ancient_chest() -> void:
+	if not hidden_passage_open or ancient_chest_claimed:
+		return
+	ancient_chest_claimed = true
+	player_coins += 150
+	relic_shards += 3
+	herbs += 5
+	ancient_caches += 1
+	_gain_xp(250)
+	_add_floating_message("ANCIENT CACHE CLAIMED  •  +250 XP / +150 COINS", player_position + Vector2(0, -70), Color("#ffd28b"))
+	_add_floating_message("+3 RELIC SHARDS  •  +5 HERBS", player_position + Vector2(0, -92), Color("#83e8e0"))
 	_save_progress()
 	queue_redraw()
 
@@ -923,6 +971,7 @@ func _inspect_ruin_object(object_index: int) -> void:
 	_add_floating_message(discoveries[object_index], player_position + Vector2(0, -68), Color("#d7c59f"))
 	_discover_codex_entry(entry_id)
 	_add_floating_message("RELIC INSPECTED: %s" % object_names[object_index], player_position + Vector2(0, -92), Color("#83e8e0"))
+	_update_hidden_passage_unlock()
 	_save_progress()
 	queue_redraw()
 
@@ -1198,6 +1247,8 @@ func _save_progress() -> void:
 		"codex_entries": codex_entries,
 		"rune_studied": rune_studied,
 		"rune_activated": rune_activated,
+		"hidden_passage_open": hidden_passage_open,
+		"ancient_chest_claimed": ancient_chest_claimed,
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
@@ -1280,9 +1331,11 @@ func _load_progress() -> void:
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
 	echo_shards = clampi(int(parsed.get("echo_shards", 0)), 0, 999999)
-	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 511)
+	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 1023)
 	rune_studied = bool(parsed.get("rune_studied", false))
 	rune_activated = bool(parsed.get("rune_activated", false))
+	hidden_passage_open = bool(parsed.get("hidden_passage_open", rune_activated and (codex_entries & 448) == 448))
+	ancient_chest_claimed = bool(parsed.get("ancient_chest_claimed", false))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
 	player_max_hp = clampi(int(parsed.get("player_max_hp", 100)), 100, 100000)
@@ -1299,6 +1352,9 @@ func _update_joystick(screen_position: Vector2) -> void:
 func _draw() -> void:
 	_draw_ground()
 	_draw_ruins()
+	_draw_hidden_hall()
+	_draw_hidden_gate()
+	_draw_ancient_chest()
 	_draw_ruin_objects()
 	_draw_ancient_rune()
 	_draw_trees()
@@ -1364,6 +1420,57 @@ func _draw_ruins() -> void:
 		var stone_pos := Vector2(725.0 + float(i * 27), 260.0 + sin(float(i)) * 18.0)
 		draw_rect(Rect2(stone_pos, Vector2(22, 15)), Color("#65685a"))
 		draw_rect(Rect2(stone_pos + Vector2(2, 2), Vector2(18, 3)), Color("#858473"))
+
+func _draw_hidden_hall() -> void:
+	if not hidden_passage_open:
+		return
+	var hall_rect := Rect2(1018.0, 292.0, 190.0, 166.0)
+	draw_rect(Rect2(hall_rect.position + Vector2(5, 8), hall_rect.size), Color("#111c19"))
+	draw_rect(hall_rect, Color("#393f37"))
+	draw_rect(Rect2(hall_rect.position + Vector2(8, 8), hall_rect.size - Vector2(16, 16)), Color("#242f2a"))
+	draw_rect(Rect2(hall_rect.position + Vector2(20, 20), hall_rect.size - Vector2(40, 40)), Color("#303b32"))
+	for pillar_y in [hall_rect.position.y + 25.0, hall_rect.position.y + hall_rect.size.y - 35.0]:
+		for pillar_x in [hall_rect.position.x + 20.0, hall_rect.position.x + hall_rect.size.x - 30.0]:
+			draw_rect(Rect2(Vector2(pillar_x, pillar_y), Vector2(14, 24)), Color("#62685a"))
+			draw_rect(Rect2(Vector2(pillar_x + 2, pillar_y + 2), Vector2(10, 4)), Color("#8c8a74"))
+	for tile_index in range(5):
+		var tile_x := hall_rect.position.x + 48.0 + float(tile_index) * 25.0
+		draw_line(Vector2(tile_x, hall_rect.position.y + 28.0), Vector2(tile_x, hall_rect.position.y + hall_rect.size.y - 28.0), Color("#465249"), 1.5)
+	var hall_glow := Color("#83e8e0")
+	hall_glow.a = 0.06 + 0.03 * sin(elapsed * 1.6)
+	draw_circle(Vector2(1112.0, 372.0), 62.0, hall_glow)
+	draw_string(ThemeDB.fallback_font, Vector2(1042, 318), "THE HALL BELOW", HORIZONTAL_ALIGNMENT_LEFT, 145, 11, Color("#c7d8c5"))
+
+func _draw_hidden_gate() -> void:
+	var gate_color := Color("#83e8e0") if hidden_passage_open else Color("#777c6d")
+	var gate_position := HIDDEN_GATE_POSITION
+	draw_rect(Rect2(gate_position + Vector2(-31, -17), Vector2(62, 38)), Color("#242d28"))
+	draw_rect(Rect2(gate_position + Vector2(-31, -17), Vector2(62, 38)), gate_color, false, 3.0)
+	for bar_index in range(4):
+		var bar_x := gate_position.x - 22.0 + float(bar_index) * 14.0
+		if not hidden_passage_open:
+			draw_line(Vector2(bar_x, gate_position.y - 14.0), Vector2(bar_x, gate_position.y + 18.0), gate_color, 3.0)
+		else:
+			draw_line(Vector2(bar_x, gate_position.y - 14.0), Vector2(bar_x - 11.0, gate_position.y + 16.0), gate_color, 2.0)
+	if hidden_passage_open:
+		var portal_glow := Color("#83e8e0")
+		portal_glow.a = 0.12 + 0.07 * sin(elapsed * 2.2)
+		draw_circle(gate_position, 44.0, portal_glow)
+		draw_string(ThemeDB.fallback_font, gate_position + Vector2(-47, -27), "PASSAGE OPEN", HORIZONTAL_ALIGNMENT_LEFT, 100, 10, Color("#bff5e9"))
+
+func _draw_ancient_chest() -> void:
+	if not hidden_passage_open:
+		return
+	var chest_color := Color("#e0bd68") if not ancient_chest_claimed else Color("#778679")
+	var chest_glow := chest_color
+	chest_glow.a = 0.10 + 0.06 * sin(elapsed * 2.0)
+	draw_circle(ANCIENT_CHEST_POSITION, 31.0, chest_glow)
+	draw_rect(Rect2(ANCIENT_CHEST_POSITION + Vector2(-20, -12), Vector2(40, 27)), Color("#55442f"))
+	draw_rect(Rect2(ANCIENT_CHEST_POSITION + Vector2(-20, -12), Vector2(40, 27)), chest_color, false, 3.0)
+	draw_rect(Rect2(ANCIENT_CHEST_POSITION + Vector2(-4, -8), Vector2(8, 18)), Color("#f5d990") if not ancient_chest_claimed else Color("#303c34"))
+	draw_line(ANCIENT_CHEST_POSITION + Vector2(-17, -3), ANCIENT_CHEST_POSITION + Vector2(17, -3), Color("#ad8b4e"), 2.0)
+	if ancient_chest_claimed:
+		draw_string(ThemeDB.fallback_font, ANCIENT_CHEST_POSITION + Vector2(-28, -21), "EMPTY", HORIZONTAL_ALIGNMENT_LEFT, 60, 9, Color("#b1c0b1"))
 
 func _draw_ruin_objects() -> void:
 	for object_index in range(RUIN_OBJECT_POSITIONS.size()):
@@ -1719,12 +1826,16 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, -2), "POTION C/R", HORIZONTAL_ALIGNMENT_LEFT, 105, 12, Color("#e7dfc8"))
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, 15), "x%d / 3 herbs" % potions, HORIZONTAL_ALIGNMENT_LEFT, 105, 11, Color("#d7c59f"))
-	if (rune_nearby or nearby_ruin_object >= 0) and not codex_open:
+	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest) and not codex_open:
 		draw_rect(RUNE_BUTTON_RECT, Color(0.035, 0.12, 0.13, 0.96))
-		var interaction_color := Color("#83e8e0") if rune_nearby else Color("#d7c59f")
+		var interaction_color := Color("#83e8e0") if rune_nearby or nearby_ancient_chest else Color("#d7c59f")
 		draw_rect(RUNE_BUTTON_RECT, interaction_color, false, 2.5)
 		var interaction_label := "RUNE AWAKENED" if rune_activated else ("ACTIVATE RUNE" if rune_studied and (codex_entries & 15) == 15 else "STUDY ANCIENT RUNE")
-		if not rune_nearby and nearby_ruin_object >= 0:
+		if nearby_ancient_chest and not rune_nearby:
+			interaction_label = "CLAIM ANCIENT CACHE"
+		elif nearby_hidden_gate and not rune_nearby:
+			interaction_label = "ENTER HIDDEN PASSAGE"
+		elif not rune_nearby and nearby_ruin_object >= 0:
 			var object_labels: Array[String] = ["INSPECT WATCHSTONE", "READ INSCRIPTION", "OPEN MEMORY CACHE"]
 			interaction_label = object_labels[nearby_ruin_object]
 		draw_string(ThemeDB.fallback_font, RUNE_BUTTON_RECT.position + Vector2(18, 24), interaction_label, HORIZONTAL_ALIGNMENT_CENTER, 212, 14, Color("#e0f7ee"))
@@ -1748,7 +1859,8 @@ func _draw_hud() -> void:
 			"The ancient rune awakens only when all four traces align.",
 			"This watchstone marks a road erased from ordinary maps.",
 			"Three keepers guarded one memory through the ages.",
-			"A sealed cache still responds to the rune's pulse."
+			"A sealed cache still responds to the rune's pulse.",
+		"Three relic traces and the awakened rune reveal the hall below."
 		]
 		var codex_found := 0
 		for entry_index in range(codex_titles.size()):
@@ -1756,9 +1868,10 @@ func _draw_hud() -> void:
 			if discovered:
 				codex_found += 1
 			var compact_codex := codex_titles.size() > 6
-			var entry_y := 211.0 + float(entry_index) * (39.0 if compact_codex else 52.0)
-			draw_circle(Vector2(310, entry_y - 4.0), 7.0 if compact_codex else 9.0, Color("#83e8e0") if discovered else Color("#53615d"))
-			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y), "%02d  %s" % [entry_index + 1, codex_titles[entry_index] if discovered else "UNKNOWN TRACE"], HORIZONTAL_ALIGNMENT_LEFT, 620, 12 if compact_codex else 14, Color("#e0f7ee") if discovered else Color("#9ba7a2"))
-			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y + (15.0 if compact_codex else 20.0)), codex_hints[entry_index] if discovered else "The details remain hidden until the trace is found.", HORIZONTAL_ALIGNMENT_LEFT, 640, 9 if compact_codex else 11, Color("#a9c9c2") if discovered else Color("#687571"))
+			var row_spacing := 35.0 if codex_titles.size() > 9 else (39.0 if compact_codex else 52.0)
+			var entry_y := 206.0 + float(entry_index) * row_spacing
+			draw_circle(Vector2(310, entry_y - 4.0), 6.0 if compact_codex else 9.0, Color("#83e8e0") if discovered else Color("#53615d"))
+			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y), "%02d  %s" % [entry_index + 1, codex_titles[entry_index] if discovered else "UNKNOWN TRACE"], HORIZONTAL_ALIGNMENT_LEFT, 620, 11 if codex_titles.size() > 9 else (12 if compact_codex else 14), Color("#e0f7ee") if discovered else Color("#9ba7a2"))
+			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y + (13.0 if codex_titles.size() > 9 else (15.0 if compact_codex else 20.0)), codex_hints[entry_index] if discovered else "The details remain hidden until the trace is found.", HORIZONTAL_ALIGNMENT_LEFT, 640, 8 if codex_titles.size() > 9 else (9 if compact_codex else 11), Color("#a9c9c2") if discovered else Color("#687571"))
 		draw_string(ThemeDB.fallback_font, Vector2(300, 574), "DISCOVERED %d / %d" % [codex_found, codex_titles.size()], HORIZONTAL_ALIGNMENT_LEFT, 220, 13, Color("#ffd28b"))
 		draw_string(ThemeDB.fallback_font, Vector2(570, 574), "TAP CLOSE OR OUTSIDE THE JOURNAL", HORIZONTAL_ALIGNMENT_LEFT, 400, 12, Color("#c5cfba"))
