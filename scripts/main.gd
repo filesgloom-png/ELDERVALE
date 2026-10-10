@@ -366,6 +366,29 @@ func _current_equipment_set_bonus() -> Dictionary:
 		bonus = {"name": "ANCIENT GUARDIAN 2/2", "damage": 1.08, "armor": 4, "crit": 0.04, "heal": 2}
 	return bonus
 
+func _current_legendary_affix() -> Dictionary:
+	var spec_name := String((_current_class_data()["specs"] as Array)[specialization_index])
+	var affix := {"name": "DORMANT RELIC", "damage": 1.0, "skill": 1.0, "armor": 0, "crit": 0.0, "heal": 0}
+	if weapon_enchant >= 4:
+		affix["name"] = spec_name.to_upper() + " EDGE"
+		match spec_name:
+			"Weaponmaster", "Reaver", "Executioner", "Way of the Fist":
+				affix["damage"] = 1.08
+			"Shadow", "Deadeye", "Stormcaller", "Way of the Gale":
+				affix["crit"] = 0.04
+			"Elementalist", "Archmage", "Artillerist", "Gravecaller":
+				affix["skill"] = 1.10
+	if armor_enchant >= 4:
+		affix["name"] = spec_name.to_upper() + " WARD" if weapon_enchant < 4 else spec_name.to_upper() + " RELIC"
+		match spec_name:
+			"Warden", "Juggernaut", "Justicar", "Aegis Smith":
+				affix["armor"] = 3
+			"Soulweaver", "Grovekeeper", "Sunkeeper", "Beastmaster":
+				affix["heal"] = 3
+			"Phantom", "Pathfinder", "Shapebinder", "Tinkerer":
+				affix["armor"] = 1
+	return affix
+
 func _spend_talent(branch: int) -> void:
 	if talent_points <= 0 or branch < 0 or branch >= talent_ranks.size() or talent_ranks[branch] >= 5:
 		_add_floating_message("NO TALENT POINTS / MAX RANK", player_position + Vector2(0, -56), Color("#e6b2a5"))
@@ -555,7 +578,8 @@ func _apply_incoming_damage(raw_damage: int, label: String) -> void:
 		_show_passive_proc("PASSIVE: %s • EVADE" % String(passive.get("name", "DODGE")), player_position, Color("#9fe6ef"))
 		return
 	var set_bonus := _current_equipment_set_bonus()
-	var armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"]) + int(passive.get("armor", 0)) + int(set_bonus["armor"])
+	var legendary_affix := _current_legendary_affix()
+	var armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"]) + int(passive.get("armor", 0)) + int(set_bonus["armor"]) + int(legendary_affix["armor"])
 	var reduction := clampf(float(passive.get("damage_reduce", 0.0)), 0.0, 0.08)
 	var damage := maxi(1, int(round(float(maxi(1, raw_damage - armor_tier * 2 - armor_enchant * 2 - armor_bonus)) * (1.0 - reduction))))
 	player_hp -= damage
@@ -603,13 +627,14 @@ func _try_attack() -> void:
 	var passive := _current_passive_data()
 	var passive_attack_multiplier := clampf(float(passive.get("attack", 1.0)), 0.90, 1.16)
 	var set_bonus := _current_equipment_set_bonus()
-	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0)) * float(spec_data.get("damage", 1.0)) * passive_attack_multiplier * float(talent_bonus["damage"]) * float(set_bonus["damage"])))
+	var legendary_affix := _current_legendary_affix()
+	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0)) * float(spec_data.get("damage", 1.0)) * passive_attack_multiplier * float(talent_bonus["damage"]) * float(set_bonus["damage"]) * float(legendary_affix["damage"])))
 	if String(class_data["name"]) == "Berserker" and float(player_hp) / float(player_max_hp) <= 0.4:
 		damage = int(round(float(damage) * 1.25))
 	var combo_bonus := 0.35 if combo_count >= 5 else (0.15 if combo_count >= 3 else 0.0)
 	combo_bonus += float(passive.get("combo", 0.0)) if combo_count >= 3 else 0.0
 	damage = int(round(float(damage) * (1.0 + combo_bonus)))
-	var critical_chance := minf(0.45, 0.08 + float(weapon_enchant) * 0.04 + float(class_data.get("crit", 0.0)) + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)) + float(set_bonus["crit"]))
+	var critical_chance := minf(0.45, 0.08 + float(weapon_enchant) * 0.04 + float(class_data.get("crit", 0.0)) + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)) + float(set_bonus["crit"]) + float(legendary_affix["crit"]))
 	var is_critical := randf() < critical_chance
 	if is_critical:
 		damage = int(round(float(damage) * 1.75))
@@ -648,8 +673,9 @@ func _try_skill() -> void:
 			var passive := _current_passive_data()
 			var passive_skill_multiplier := clampf(float(passive.get("skill", 1.0)), 0.90, 1.18)
 			var set_bonus := _current_equipment_set_bonus()
-			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0)) * passive_skill_multiplier * float(talent_bonus["skill"]) * float(set_bonus["damage"])))
-			var critical_chance := minf(0.30, 0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5 + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)) + float(set_bonus["crit"]))
+			var legendary_affix := _current_legendary_affix()
+			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0)) * passive_skill_multiplier * float(talent_bonus["skill"]) * float(set_bonus["damage"]) * float(legendary_affix["damage"]) * float(legendary_affix["skill"])))
+			var critical_chance := minf(0.30, 0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5 + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)) + float(set_bonus["crit"]) + float(legendary_affix["crit"]))
 			if spec_name == "Executioner" and float(mob["hp"]) / maxf(1.0, float(mob["max_hp"])) <= 0.35:
 				damage = int(round(float(damage) * 1.35))
 				_add_floating_message("EXECUTE!", Vector2(mob["pos"]) + Vector2(0, -66), Color("#ff8b78"))
@@ -700,7 +726,8 @@ func _try_ultimate() -> void:
 	var power := float(ultimate["power"]) * clampf(float(passive.get("ultimate", 1.0)), 0.90, 1.12)
 	var passive_skill_multiplier := clampf(float(passive.get("skill", 1.0)), 0.90, 1.18)
 	var set_bonus := _current_equipment_set_bonus()
-	var base_damage := float(70 + weapon_tier * 10 + weapon_enchant * 5) * float(set_bonus["damage"])
+	var legendary_affix := _current_legendary_affix()
+	var base_damage := float(70 + weapon_tier * 10 + weapon_enchant * 5) * float(set_bonus["damage"]) * float(legendary_affix["damage"]) * float(legendary_affix["skill"])
 	combat_effects.append({"kind": "ultimate", "pos": player_position, "life": 0.72, "duration": 0.72})
 	_add_floating_message(String(ultimate["name"]) + "!", player_position + Vector2(0, -76), Color("#ffd28b"))
 	_show_passive_proc("PASSIVE ULTIMATE: %s" % String(passive.get("name", "ASCENDANT")), player_position, Color("#b8e8a0"))
@@ -722,7 +749,8 @@ func _try_ultimate() -> void:
 		hit_count += 1
 		if int(mob["hp"]) <= 0:
 			_defeat_mob(mob)
-	var heal_amount := int(ultimate["heal"]) + int(passive.get("heal", 0)) + int(talent_bonus["heal"])
+	var legendary_affix := _current_legendary_affix()
+	var heal_amount := int(ultimate["heal"]) + int(passive.get("heal", 0)) + int(talent_bonus["heal"]) + int(legendary_affix["heal"])
 	if hit_count > 0 and heal_amount > 0:
 		var old_hp := player_hp
 		player_hp = mini(player_max_hp, player_hp + heal_amount)
@@ -1023,7 +1051,9 @@ func _save_progress() -> void:
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
-		"player_max_hp": player_max_hp
+		"player_max_hp": player_max_hp,
+		"player_position_x": player_position.x,
+		"player_position_y": player_position.y
 	}
 	var temp_path := save_path + ".tmp"
 	var backup_path := save_path + ".bak"
@@ -1077,7 +1107,7 @@ func _load_progress() -> void:
 			_add_floating_message("SAVE RESTORED FROM BACKUP", player_position + Vector2(0, -58), Color("#b8e8a0"))
 	if parsed.is_empty():
 		return
-	player_level = maxi(1, int(parsed.get("level", 1)))
+	player_level = clampi(int(parsed.get("level", 1)), 1, MAX_PLAYER_LEVEL)
 	talent_points = maxi(0, int(parsed.get("talent_points", 0)))
 	var saved_talents = parsed.get("talent_ranks", [0, 0, 0])
 	if saved_talents is Array and saved_talents.size() >= 3:
@@ -1101,8 +1131,12 @@ func _load_progress() -> void:
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
-	player_max_hp = maxi(100, int(parsed.get("player_max_hp", 100)))
+	player_max_hp = clampi(int(parsed.get("player_max_hp", 100)), 100, 100000)
 	player_hp = clampi(int(parsed.get("player_hp", player_max_hp)), 1, player_max_hp)
+	player_position = Vector2(
+		clampf(float(parsed.get("player_position_x", WORLD_SIZE.x * 0.5)), 36.0, WORLD_SIZE.x - 36.0),
+		clampf(float(parsed.get("player_position_y", WORLD_SIZE.y * 0.5)), 70.0, WORLD_SIZE.y - 35.0)
+	)
 
 func _update_joystick(screen_position: Vector2) -> void:
 	var offset := screen_position - JOYSTICK_CENTER
@@ -1459,8 +1493,10 @@ func _draw_hud() -> void:
 		draw_string(ThemeDB.fallback_font, talent_center + Vector2(-58, 14), "KEY %d" % (branch + 1), HORIZONTAL_ALIGNMENT_LEFT, 120, 9, Color("#d7c59f"))
 	draw_string(ThemeDB.fallback_font, Vector2(640, 432), "TALENT POINTS: %d" % talent_points, HORIZONTAL_ALIGNMENT_CENTER, 280, 13, Color("#b8e8a0") if talent_points > 0 else Color("#c5cfba"))
 	var set_bonus := _current_equipment_set_bonus()
+	var legendary_affix := _current_legendary_affix()
 	var set_color := Color("#ffd28b") if weapon_enchant >= 4 and armor_enchant >= 4 else (Color("#b8e8a0") if weapon_enchant >= 2 and armor_enchant >= 2 else Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(640, 454), "SET: %s  •  DMG +%d%%  •  ARMOR +%d  •  CRIT +%d%%" % [String(set_bonus["name"]), int(round((float(set_bonus["damage"]) - 1.0) * 100.0)), int(set_bonus["armor"]), int(round(float(set_bonus["crit"]) * 100.0))], HORIZONTAL_ALIGNMENT_CENTER, 560, 11, set_color)
+	draw_string(ThemeDB.fallback_font, Vector2(640, 474), "LEGENDARY: %s  •  DMG +%d%%  •  SKILL +%d%%  •  ARMOR +%d" % [String(legendary_affix["name"]), int(round((float(legendary_affix["damage"]) - 1.0) * 100.0)), int(round((float(legendary_affix["skill"]) - 1.0) * 100.0)), int(legendary_affix["armor"])], HORIZONTAL_ALIGNMENT_CENTER, 560, 10, Color("#ffd28b") if weapon_enchant >= 4 or armor_enchant >= 4 else Color("#c5cfba"))
 	var forge_weapon_center := _forge_weapon_button_center()
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color("#c49a62"), false, 2.0)
