@@ -1340,7 +1340,7 @@ func _draw_ancient_rune() -> void:
 	draw_line(ANCIENT_RUNE_POSITION + Vector2(-12, -7), ANCIENT_RUNE_POSITION + Vector2(12, 7), Color("#9bf5e8") if rune_activated else Color("#8eb9a9"), 3.0)
 	draw_line(ANCIENT_RUNE_POSITION + Vector2(-12, 7), ANCIENT_RUNE_POSITION + Vector2(12, -7), Color("#9bf5e8") if rune_activated else Color("#8eb9a9"), 2.0)
 	if rune_activated:
-		draw_circle(ANCIENT_RUNE_POSITION, 34.0 + pulse * 5.0, Color(0.52, 0.95, 0.88, 0.28), false, 2.0)
+		draw_arc(ANCIENT_RUNE_POSITION, 34.0 + pulse * 5.0, 0.0, TAU, 48, Color(0.52, 0.95, 0.88, 0.28), 2.0)
 
 func _draw_stone_building(pos: Vector2, size: Vector2) -> void:
 	draw_rect(Rect2(pos + Vector2(5, 8), size), Color("#1b2924"))
