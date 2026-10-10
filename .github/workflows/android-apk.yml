@@ -75,8 +75,13 @@ jobs:
 
       - name: Import and validate project
         run: |
+          set -o pipefail
           godot --headless --path . --editor --import --quit
-          godot --headless --path . --quit
+          godot --headless --path . --quit-after 3 --verbose 2>&1 | tee /tmp/eldervale-smoke.log
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load script|Invalid call\. Nonexistent function|Attempt to call function" /tmp/eldervale-smoke.log; then
+            echo "Godot runtime smoke test reported script errors."
+            exit 1
+          fi
 
       - name: Export Android ARM64 debug APK
         run: |
