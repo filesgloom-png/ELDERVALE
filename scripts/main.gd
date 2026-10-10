@@ -22,6 +22,12 @@ const WATCHTOWER_PATH_POSITION := Vector2(674.0, 610.0)
 const WATCHTOWER_PATH_RANGE := 78.0
 const FROSTWATCH_RELIC_POSITION := Vector2(842.0, 572.0)
 const FROSTWATCH_RELIC_RANGE := 76.0
+const WATCHTOWER_SYMBOL_POSITIONS := [Vector2(760.0, 535.0), Vector2(828.0, 515.0), Vector2(882.0, 535.0)]
+const WATCHTOWER_SYMBOL_RANGE := 48.0
+const WATCHTOWER_CACHE_POSITION := Vector2(770.0, 614.0)
+const WATCHTOWER_CACHE_RANGE := 58.0
+const FROSTFALL_ROUTE_POSITION := Vector2(896.0, 610.0)
+const FROSTFALL_ROUTE_RANGE := 58.0
 const CODEX_BUTTON_RECT := Rect2(1114.0, 145.0, 146.0, 44.0)
 const RUNE_BUTTON_RECT := Rect2(516.0, 620.0, 248.0, 58.0)
 const CODEX_CLOSE_RECT := Rect2(914.0, 124.0, 82.0, 38.0)
@@ -155,6 +161,9 @@ var nearby_shattered_beacon := false
 var nearby_northbound_signal := false
 var nearby_watchtower_path := false
 var nearby_frostwatch_relic := false
+var nearby_watchtower_symbol := -1
+var nearby_watchtower_cache := false
+var nearby_frostfall_route := false
 var hidden_passage_open := false
 var ancient_chest_claimed := false
 var shattered_reach_unlocked := false
@@ -164,6 +173,9 @@ var northbound_signal_discovered := false
 var watchtower_path_open := false
 var watchtower_discovered := false
 var frostwatch_relic_discovered := false
+var watchtower_symbols := 0
+var watchtower_cache_claimed := false
+var frostfall_pass_open := false
 var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
@@ -224,6 +236,18 @@ func _process(delta: float) -> void:
 	nearby_northbound_signal = shattered_beacon_activated and player_position.distance_to(NORTHBOUND_SIGNAL_POSITION) <= NORTHBOUND_SIGNAL_RANGE
 	nearby_watchtower_path = northbound_signal_discovered and player_position.distance_to(WATCHTOWER_PATH_POSITION) <= WATCHTOWER_PATH_RANGE
 	nearby_frostwatch_relic = watchtower_discovered and not frostwatch_relic_discovered and player_position.distance_to(FROSTWATCH_RELIC_POSITION) <= FROSTWATCH_RELIC_RANGE
+	nearby_watchtower_symbol = -1
+	var closest_watchtower_symbol_distance := WATCHTOWER_SYMBOL_RANGE
+	if watchtower_discovered:
+		for symbol_index in range(WATCHTOWER_SYMBOL_POSITIONS.size()):
+			if (watchtower_symbols & (1 << symbol_index)) != 0:
+				continue
+			var symbol_distance: float = player_position.distance_to(WATCHTOWER_SYMBOL_POSITIONS[symbol_index])
+			if symbol_distance <= closest_watchtower_symbol_distance:
+				closest_watchtower_symbol_distance = symbol_distance
+				nearby_watchtower_symbol = symbol_index
+	nearby_watchtower_cache = watchtower_discovered and watchtower_symbols == 7 and not watchtower_cache_claimed and player_position.distance_to(WATCHTOWER_CACHE_POSITION) <= WATCHTOWER_CACHE_RANGE
+	nearby_frostfall_route = watchtower_discovered and player_position.distance_to(FROSTFALL_ROUTE_POSITION) <= FROSTFALL_ROUTE_RANGE
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
 	if dodge_time > 0.0:
@@ -298,6 +322,12 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 			_claim_ancient_chest()
 		elif nearby_northbound_signal:
 			_inspect_northbound_signal()
+		elif nearby_watchtower_symbol >= 0:
+			_inspect_watchtower_symbol(nearby_watchtower_symbol)
+		elif nearby_watchtower_cache:
+			_claim_watchtower_cache()
+		elif nearby_frostfall_route:
+			_open_frostfall_pass()
 		elif nearby_frostwatch_relic:
 			_inspect_frostwatch_relic()
 		elif nearby_watchtower_path:
@@ -933,30 +963,22 @@ func _toggle_codex() -> void:
 	queue_redraw()
 
 func _discover_codex_entry(entry_id: int) -> void:
-	if entry_id < 0 or entry_id > 13:
+	var titles: Array[String] = [
+		"A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription",
+		"The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath",
+		"The Sealed Memory", "The Hall Beneath", "The Memory Guardian", "The Shattered Reach",
+		"The First Beacon", "The Northbound Signal", "The Forgotten Watchtower", "Frostwatch Relic",
+		"First Watchtower Symbol", "Second Watchtower Symbol", "Third Watchtower Symbol",
+		"The Watchtower Memory Cache", "The Road to Frostfall Pass"
+	]
+	if entry_id < 0 or entry_id >= titles.size():
 		return
 	var entry_bit := 1 << entry_id
 	if (codex_entries & entry_bit) != 0:
 		return
-	codex_entries = codex_entries | entry_bit
-	var titles: Array[String] = [
-		"A Voice in the Ash",
-		"Resonance Awakened",
-		"Memory of the Guardian",
-		"The Cache Inscription",
-		"The First Convergence",
-		"The Rune of Convergence",
-		"The Watchstone Road",
-		"The Pilgrim's Oath",
-		"The Sealed Memory",
-		"The Hall Beneath",
-		"The Memory Guardian",
-		"The Shattered Reach",
-		"The First Beacon",
-		"The Northbound Signal"
-	]
-	var reward_xp := 300 if entry_id == 13 else (250 if entry_id == 12 else (200 if entry_id == 11 else (400 if entry_id == 10 else (150 if entry_id == 5 else (100 if entry_id == 4 else 20)))))
-	var reward_coins := 150 if entry_id == 13 else (125 if entry_id == 12 else (100 if entry_id == 11 else (250 if entry_id == 10 else (75 if entry_id == 5 else (50 if entry_id == 4 else 10)))))
+	codex_entries |= entry_bit
+	var reward_xp := 300 if entry_id == 13 else (250 if entry_id == 12 else (200 if entry_id == 11 else (400 if entry_id == 10 else (150 if entry_id == 5 else (100 if entry_id == 4 else (35 + (entry_id - 14) * 10 if entry_id >= 14 else 20))))))
+	var reward_coins := 150 if entry_id == 13 else (125 if entry_id == 12 else (100 if entry_id == 11 else (250 if entry_id == 10 else (75 if entry_id == 5 else (50 if entry_id == 4 else (15 + (entry_id - 14) * 5 if entry_id >= 14 else 10))))))
 	_gain_xp(reward_xp)
 	player_coins += reward_coins
 	_add_floating_message("CODEX FOUND: %s" % titles[entry_id], player_position + Vector2(0, -68), Color("#83e8e0"))
@@ -1072,6 +1094,55 @@ func _inspect_frostwatch_relic() -> void:
 	_process_level_ups()
 	_add_floating_message("FROSTWATCH RELIC RECOVERED", player_position + Vector2(0, -70), Color("#b9dff2"))
 	_add_floating_message("ECHO SHARD +1  •  XP +20", player_position + Vector2(0, -94), Color("#9dffe2"))
+	_save_progress()
+	queue_redraw()
+
+
+func _inspect_watchtower_symbol(symbol_index: int) -> void:
+	if not watchtower_discovered or symbol_index < 0 or symbol_index >= WATCHTOWER_SYMBOL_POSITIONS.size():
+		return
+	var symbol_bit := 1 << symbol_index
+	if (watchtower_symbols & symbol_bit) != 0:
+		return
+	watchtower_symbols |= symbol_bit
+	_discover_codex_entry(16 + symbol_index)
+	var symbol_names: Array[String] = ["FIRST", "SECOND", "THIRD"]
+	_add_floating_message("%s ANCIENT SYMBOL READ" % symbol_names[symbol_index], player_position + Vector2(0, -70), Color("#b9dff2"))
+	if watchtower_symbols == 7:
+		_add_floating_message("THE THREE SYMBOLS ALIGN — THE CACHE STIRS", player_position + Vector2(0, -94), Color("#83e8e0"))
+	_save_progress()
+	queue_redraw()
+
+
+func _claim_watchtower_cache() -> void:
+	if not watchtower_discovered or watchtower_symbols != 7 or watchtower_cache_claimed:
+		return
+	watchtower_cache_claimed = true
+	relic_shards += 2
+	player_coins += 75
+	_gain_xp(60)
+	_discover_codex_entry(19)
+	_add_floating_message("WATCHTOWER MEMORY CACHE OPENED", player_position + Vector2(0, -70), Color("#ffd28b"))
+	_add_floating_message("+2 RELIC SHARDS  •  +75 COINS  •  +60 XP", player_position + Vector2(0, -94), Color("#83e8e0"))
+	_save_progress()
+	queue_redraw()
+
+
+func _open_frostfall_pass() -> void:
+	if not watchtower_discovered:
+		return
+	if not (watchtower_symbols == 7 and watchtower_cache_claimed and frostwatch_relic_discovered):
+		_add_floating_message("THE PASS NEEDS THREE SYMBOLS, THE CACHE, AND THE FROSTWATCH RELIC", player_position + Vector2(0, -70), Color("#d7c59f"))
+		return
+	if frostfall_pass_open:
+		_add_floating_message("FROSTFALL PASS IS ALREADY OPEN", player_position + Vector2(0, -62), Color("#83e8e0"))
+		return
+	frostfall_pass_open = true
+	_discover_codex_entry(20)
+	echo_shards += 1
+	_gain_xp(40)
+	_add_floating_message("FROSTFALL PASS UNSEALED", player_position + Vector2(0, -70), Color("#b9dff2"))
+	_add_floating_message("A NEW ROUTE OPENS BEYOND THE WATCHTOWER", player_position + Vector2(0, -94), Color("#83e8e0"))
 	_save_progress()
 	queue_redraw()
 
@@ -1381,7 +1452,7 @@ func _xp_for_next_level() -> int:
 
 func _save_progress() -> void:
 	var data := {
-		"save_version": 5,
+		"save_version": 6,
 		"level": player_level,
 		"talent_points": talent_points,
 		"talent_ranks": talent_ranks,
@@ -1415,6 +1486,9 @@ func _save_progress() -> void:
 		"watchtower_path_open": watchtower_path_open,
 		"watchtower_discovered": watchtower_discovered,
 		"frostwatch_relic_discovered": frostwatch_relic_discovered,
+		"watchtower_symbols": watchtower_symbols,
+		"watchtower_cache_claimed": watchtower_cache_claimed,
+		"frostfall_pass_open": frostfall_pass_open,
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
@@ -1497,7 +1571,7 @@ func _load_progress() -> void:
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
 	echo_shards = clampi(int(parsed.get("echo_shards", 0)), 0, 999999)
-	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 65535)
+	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 2097151)
 	rune_studied = bool(parsed.get("rune_studied", false))
 	rune_activated = bool(parsed.get("rune_activated", false))
 	hidden_passage_open = bool(parsed.get("hidden_passage_open", rune_activated and (codex_entries & 448) == 448))
@@ -1511,6 +1585,9 @@ func _load_progress() -> void:
 	watchtower_path_open = bool(parsed.get("watchtower_path_open", false))
 	watchtower_discovered = bool(parsed.get("watchtower_discovered", false))
 	frostwatch_relic_discovered = bool(parsed.get("frostwatch_relic_discovered", false))
+	watchtower_symbols = clampi(int(parsed.get("watchtower_symbols", 0)), 0, 7)
+	watchtower_cache_claimed = bool(parsed.get("watchtower_cache_claimed", false))
+	frostfall_pass_open = bool(parsed.get("frostfall_pass_open", false))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
 	player_max_hp = clampi(int(parsed.get("player_max_hp", 100)), 100, 100000)
@@ -1713,6 +1790,30 @@ func _draw_forgotten_watchtower() -> void:
 	draw_circle(FROSTWATCH_RELIC_POSITION, 28.0, relic_glow)
 	draw_polygon(PackedVector2Array([FROSTWATCH_RELIC_POSITION + Vector2(0, -15), FROSTWATCH_RELIC_POSITION + Vector2(12, 0), FROSTWATCH_RELIC_POSITION + Vector2(0, 15), FROSTWATCH_RELIC_POSITION + Vector2(-12, 0)]), PackedColorArray([Color("#b9dff2"), Color("#7199b2"), Color("#d6f0ff"), Color("#7199b2")]))
 	draw_string(ThemeDB.fallback_font, FROSTWATCH_RELIC_POSITION + Vector2(-50, 32), "FROSTWATCH RELIC" if not frostwatch_relic_discovered else "RELIC RECOVERED", HORIZONTAL_ALIGNMENT_LEFT, 130, 9, Color("#b9dff2"))
+	for symbol_index in range(WATCHTOWER_SYMBOL_POSITIONS.size()):
+		var symbol_pos: Vector2 = WATCHTOWER_SYMBOL_POSITIONS[symbol_index]
+		var symbol_found := (watchtower_symbols & (1 << symbol_index)) != 0
+		var symbol_color := Color("#83e8e0") if symbol_found else Color("#b9dff2")
+		var pulse := 0.6 + 0.4 * sin(elapsed * 2.0 + float(symbol_index))
+		draw_circle(symbol_pos, 15.0 + pulse * 3.0, Color(symbol_color.r, symbol_color.g, symbol_color.b, 0.08 + pulse * 0.08))
+		draw_line(symbol_pos + Vector2(-8, 0), symbol_pos + Vector2(8, 0), symbol_color, 2.0)
+		draw_line(symbol_pos + Vector2(0, -9), symbol_pos + Vector2(0, 9), symbol_color, 2.0)
+		draw_line(symbol_pos + Vector2(-6, -6), symbol_pos + Vector2(6, 6), symbol_color, 1.5)
+		draw_string(ThemeDB.fallback_font, symbol_pos + Vector2(-22, 25), "MARK %d" % (symbol_index + 1) if not symbol_found else "READ", HORIZONTAL_ALIGNMENT_LEFT, 60, 9, symbol_color)
+	var cache_color := Color("#ffd28b") if not watchtower_cache_claimed else Color("#71817c")
+	draw_rect(Rect2(WATCHTOWER_CACHE_POSITION - Vector2(14, 10), Vector2(28, 20)), cache_color)
+	draw_rect(Rect2(WATCHTOWER_CACHE_POSITION - Vector2(14, 10), Vector2(28, 20)), Color("#24343a"), false, 2.0)
+	draw_line(WATCHTOWER_CACHE_POSITION + Vector2(0, -10), WATCHTOWER_CACHE_POSITION + Vector2(0, 10), Color("#24343a"), 2.0)
+	draw_string(ThemeDB.fallback_font, WATCHTOWER_CACHE_POSITION + Vector2(-36, 23), "MEMORY CACHE" if not watchtower_cache_claimed else "CACHE EMPTY", HORIZONTAL_ALIGNMENT_LEFT, 90, 8, cache_color)
+	if frostfall_pass_open:
+		draw_line(Vector2(880, 605), Vector2(950, 625), Color("#b9dff2", 0.75), 7.0)
+		draw_line(Vector2(900, 610), Vector2(972, 585), Color("#83e8e0", 0.55), 3.0)
+		draw_string(ThemeDB.fallback_font, Vector2(902, 578), "FROSTFALL PASS", HORIZONTAL_ALIGNMENT_LEFT, 150, 10, Color("#b9dff2"))
+	else:
+		var route_glow := Color("#b9dff2", 0.10 + 0.06 * sin(elapsed * 1.5))
+		draw_circle(FROSTFALL_ROUTE_POSITION, 17.0, route_glow)
+		draw_line(FROSTFALL_ROUTE_POSITION + Vector2(-8, 0), FROSTFALL_ROUTE_POSITION + Vector2(8, 0), Color("#839ca7"), 3.0)
+		draw_string(ThemeDB.fallback_font, FROSTFALL_ROUTE_POSITION + Vector2(-42, -22), "SEALED PASS", HORIZONTAL_ALIGNMENT_LEFT, 100, 9, Color("#b9dff2"))
 
 
 func _draw_ancient_chest() -> void:
@@ -2087,13 +2188,19 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, -2), "POTION C/R", HORIZONTAL_ALIGNMENT_LEFT, 105, 12, Color("#e7dfc8"))
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, 15), "x%d / 3 herbs" % potions, HORIZONTAL_ALIGNMENT_LEFT, 105, 11, Color("#d7c59f"))
-	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon or nearby_northbound_signal or nearby_watchtower_path or nearby_frostwatch_relic) and not codex_open:
+	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon or nearby_northbound_signal or nearby_watchtower_path or nearby_frostwatch_relic or nearby_watchtower_symbol >= 0 or nearby_watchtower_cache or nearby_frostfall_route) and not codex_open:
 		draw_rect(RUNE_BUTTON_RECT, Color(0.035, 0.12, 0.13, 0.96))
 		var interaction_color := Color("#83e8e0") if rune_nearby or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon or nearby_northbound_signal else Color("#d7c59f")
 		draw_rect(RUNE_BUTTON_RECT, interaction_color, false, 2.5)
 		var interaction_label := "RUNE AWAKENED" if rune_activated else ("ACTIVATE RUNE" if rune_studied and (codex_entries & 15) == 15 else "STUDY ANCIENT RUNE")
 		if nearby_northbound_signal and not rune_nearby:
 			interaction_label = "TRACE RECORDED" if northbound_signal_discovered else "FOLLOW NORTHBOUND SIGNAL"
+		elif nearby_watchtower_symbol >= 0 and not rune_nearby:
+			interaction_label = ["READ FIRST SYMBOL", "READ SECOND SYMBOL", "READ THIRD SYMBOL"][nearby_watchtower_symbol]
+		elif nearby_watchtower_cache and not rune_nearby:
+			interaction_label = "OPEN MEMORY CACHE"
+		elif nearby_frostfall_route and not rune_nearby:
+			interaction_label = "ENTER FROSTFALL PASS" if frostfall_pass_open else "UNSEAL FROSTFALL PASS"
 		elif nearby_frostwatch_relic and not rune_nearby:
 			interaction_label = "RELIC RECOVERED" if frostwatch_relic_discovered else "RECOVER FROSTWATCH RELIC"
 		elif nearby_watchtower_path and not rune_nearby:
@@ -2120,7 +2227,7 @@ func _draw_hud() -> void:
 		draw_rect(CODEX_CLOSE_RECT, Color("#83e8e0"), false, 1.5)
 		draw_string(ThemeDB.fallback_font, CODEX_CLOSE_RECT.position + Vector2(14, 24), "CLOSE", HORIZONTAL_ALIGNMENT_LEFT, 64, 12, Color("#e0f7ee"))
 		draw_string(ThemeDB.fallback_font, Vector2(300, 187), "Collect traces from combat and ancient relics. Four clues reveal a hidden convergence.", HORIZONTAL_ALIGNMENT_LEFT, 680, 12, Color("#a9c9c2"))
-		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian", "The Shattered Reach", "The First Beacon", "The Northbound Signal", "The Forgotten Watchtower", "Frostwatch Relic"]
+		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian", "The Shattered Reach", "The First Beacon", "The Northbound Signal", "The Forgotten Watchtower", "Frostwatch Relic", "First Watchtower Symbol", "Second Watchtower Symbol", "Third Watchtower Symbol", "The Watchtower Memory Cache", "The Road to Frostfall Pass"]
 		var codex_hints: Array[String] = [
 			"A fragment remembers something its owner forgot.",
 			"Three echoes briefly become one living force.",
@@ -2137,7 +2244,12 @@ func _draw_hud() -> void:
 			"The beacon has awakened. Its light points toward a distant signal beyond the shattered road.",
 			"A faint answering light marks a route to a forgotten watchtower farther north.",
 			"The broken northern path opens into a wind-scoured watchtower, abandoned but not silent.",
-			"A frostbound relic holds an echo from the watchtower's final keeper."
+			"A frostbound relic holds an echo from the watchtower's final keeper.",
+			"The first mark names the watchtower's last oath: keep the northern light alive.",
+			"The second mark records a path through the snowbound ridges.",
+			"The third mark warns that the pass opens only when memory and relic are reunited.",
+			"The three symbols align. A hidden cache preserves the keeper's final testimony.",
+			"The seal breaks, revealing a road into Frostfall Pass and the lands beyond."
 		]
 		var codex_found := 0
 		for entry_index in range(codex_titles.size()):
@@ -2145,7 +2257,7 @@ func _draw_hud() -> void:
 			if discovered:
 				codex_found += 1
 			var compact_codex := codex_titles.size() > 6
-			var row_spacing := 25.0 if codex_titles.size() > 13 else (27.0 if codex_titles.size() > 12 else (35.0 if codex_titles.size() > 9 else (39.0 if compact_codex else 52.0)))
+			var row_spacing := 20.0 if codex_titles.size() > 16 else (25.0 if codex_titles.size() > 13 else (27.0 if codex_titles.size() > 12 else (35.0 if codex_titles.size() > 9 else (39.0 if compact_codex else 52.0))))
 			var entry_y := 206.0 + float(entry_index) * row_spacing
 			draw_circle(Vector2(310, entry_y - 4.0), 6.0 if compact_codex else 9.0, Color("#83e8e0") if discovered else Color("#53615d"))
 			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y), "%02d  %s" % [entry_index + 1, codex_titles[entry_index] if discovered else "UNKNOWN TRACE"], HORIZONTAL_ALIGNMENT_LEFT, 620, 11 if codex_titles.size() > 9 else (12 if compact_codex else 14), Color("#e0f7ee") if discovered else Color("#9ba7a2"))
