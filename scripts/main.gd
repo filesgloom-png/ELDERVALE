@@ -2025,7 +2025,7 @@ func _draw_hud() -> void:
 			if discovered:
 				codex_found += 1
 			var compact_codex := codex_titles.size() > 6
-			var row_spacing := 30.0 if codex_titles.size() > 12 else (35.0 if codex_titles.size() > 9 else (39.0 if compact_codex else 52.0))
+			var row_spacing := 27.0 if codex_titles.size() > 12 else (35.0 if codex_titles.size() > 9 else (39.0 if compact_codex else 52.0))
 			var entry_y := 206.0 + float(entry_index) * row_spacing
 			draw_circle(Vector2(310, entry_y - 4.0), 6.0 if compact_codex else 9.0, Color("#83e8e0") if discovered else Color("#53615d"))
 			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y), "%02d  %s" % [entry_index + 1, codex_titles[entry_index] if discovered else "UNKNOWN TRACE"], HORIZONTAL_ALIGNMENT_LEFT, 620, 11 if codex_titles.size() > 9 else (12 if compact_codex else 14), Color("#e0f7ee") if discovered else Color("#9ba7a2"))
