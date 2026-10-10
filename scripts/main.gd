@@ -1662,6 +1662,12 @@ func _draw_ground() -> void:
 				var tuft_y := tile_y + float(posmod(y * 23 + x * 11, 43)) + 8.0
 				draw_line(Vector2(tuft_x, tuft_y), Vector2(tuft_x - 3.0, tuft_y - 7.0), Color("#567052"), 2.0)
 				draw_line(Vector2(tuft_x, tuft_y), Vector2(tuft_x + 4.0, tuft_y - 5.0), Color("#6b8057"), 2.0)
+			if variation == 0 or variation == 4:
+				var detail_x := tile_x + 14.0 + float(posmod(x * 29 + y * 13, 39))
+				var detail_y := tile_y + 18.0 + float(posmod(y * 17 + x * 23, 37))
+				var stone_tint := Color("#536052") if variation == 0 else Color("#6b7650")
+				draw_circle(Vector2(detail_x, detail_y), 1.8 if variation == 0 else 1.3, stone_tint)
+				draw_line(Vector2(detail_x + 3.0, detail_y + 4.0), Vector2(detail_x + 7.0, detail_y + 2.0), Color("#394b3c"), 1.0)
 	_draw_moss_patches()
 	_draw_path()
 
