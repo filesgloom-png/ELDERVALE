@@ -30,6 +30,7 @@ var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
 var second_quest_reward_claimed := false
+var guardian_defeated := false
 var mobs: Array[Dictionary] = []
 var loot_drops: Array[Dictionary] = []
 var floating_messages: Array[Dictionary] = []
@@ -40,6 +41,7 @@ var save_path := "user://eldervale_save.json"
 func _ready() -> void:
 	_spawn_initial_mobs()
 	_load_progress()
+	_ensure_guardian_encounter()
 	queue_redraw()
 
 func _process(delta: float) -> void:
@@ -145,6 +147,9 @@ func _update_mobs(delta: float) -> void:
 	for i in range(mobs.size()):
 		var mob: Dictionary = mobs[i]
 		if not mob["alive"]:
+			if bool(mob.get("boss", false)):
+				mobs[i] = mob
+				continue
 			var respawn_timer := float(mob.get("respawn_timer", 0.0)) - delta
 			mob["respawn_timer"] = respawn_timer
 			if respawn_timer <= 0.0:
@@ -162,13 +167,35 @@ func _update_mobs(delta: float) -> void:
 			mob.erase("hit_flash")
 		var to_player := player_position - mob_pos
 		var distance_to_player := to_player.length()
+		var mob_name := String(mob["name"])
+		var attack_range := 34.0
+		var windup_duration := 0.42
+		if mob_name == "Ruins Stalker":
+			attack_range = 66.0
+			windup_duration = 0.72
+		elif mob_name == "Ruin Guardian":
+			attack_range = 58.0
+			windup_duration = 0.92
 		var local_attack_cooldown := maxf(float(mob.get("attack_cooldown", 0.0)) - delta, 0.0)
 		mob["attack_cooldown"] = local_attack_cooldown
 		var attack_windup := float(mob.get("attack_windup", 0.0))
-		if distance_to_player < 310.0 and distance_to_player > 34.0:
-			mob_pos += to_player.normalized() * float(mob["speed"]) * delta
+		if distance_to_player < 310.0 and distance_to_player > attack_range:
+			var movement_direction := to_player.normalized()
+			if mob_name == "Dusk Scavenger" and distance_to_player < 135.0:
+				movement_direction = movement_direction.rotated(sin(elapsed * 2.8 + float(i)) * 0.72)
+			var move_speed := float(mob["speed"])
+			if mob_name == "Ash Wolf":
+				var pounce_cooldown := maxf(float(mob.get("pounce_cooldown", 0.0)) - delta, 0.0)
+				if distance_to_player >= 62.0 and distance_to_player <= 150.0 and pounce_cooldown <= 0.0:
+					move_speed *= 3.4
+					mob["pounce_cooldown"] = 2.6
+					mob["pounce_flash"] = 0.28
+				else:
+					mob["pounce_cooldown"] = pounce_cooldown
+					mob["pounce_flash"] = maxf(float(mob.get("pounce_flash", 0.0)) - delta, 0.0)
+			mob_pos += movement_direction * move_speed * delta
 			mob["attack_windup"] = 0.0
-		elif distance_to_player <= 34.0:
+		elif distance_to_player <= attack_range:
 			if attack_windup > 0.0:
 				attack_windup = maxf(attack_windup - delta, 0.0)
 				mob["attack_windup"] = attack_windup
@@ -177,15 +204,16 @@ func _update_mobs(delta: float) -> void:
 					player_hp -= incoming_damage
 					player_hit_flash = 0.22
 					_add_floating_message("-%d" % incoming_damage, player_position + Vector2(0, -35), Color("#f28f82"))
-					mob["attack_cooldown"] = 0.85
+					mob["attack_cooldown"] = 0.85 if mob_name != "Ruin Guardian" else 1.25
 					if player_hp <= 0:
 						player_hp = player_max_hp
 						player_position = WORLD_SIZE * 0.5
 			elif local_attack_cooldown <= 0.0:
-				mob["attack_windup"] = 0.42
+				mob["attack_windup"] = windup_duration
 		else:
 			mob["attack_windup"] = 0.0
 		mob["pos"] = mob_pos
+		mobs[i] = mob
 
 func _try_attack() -> void:
 	if attack_cooldown > 0.0:
@@ -241,14 +269,20 @@ func _try_skill() -> void:
 func _defeat_mob(mob: Dictionary) -> void:
 	if not mob["alive"]:
 		return
+	var is_boss := bool(mob.get("boss", false))
 	mob["alive"] = false
-	mob["respawn_timer"] = 8.0
+	if not is_boss:
+		mob["respawn_timer"] = 8.0
+	else:
+		guardian_defeated = true
 	kills += 1
-	_spawn_loot_drop(mob["pos"], "coins", 3 + player_level)
+	_spawn_loot_drop(mob["pos"], "coins", (35 + player_level * 3) if is_boss else (3 + player_level))
 	_spawn_loot_drop(mob["pos"] + Vector2(-15, 8), "herbs", 1 + int(kills % 2))
 	if int(mob["xp"]) >= 28:
-		_spawn_loot_drop(mob["pos"] + Vector2(15, -8), "relic", 1)
+		_spawn_loot_drop(mob["pos"] + Vector2(15, -8), "relic", 4 if is_boss else 1)
 	_gain_xp(int(mob["xp"]))
+	if not is_boss:
+		_ensure_guardian_encounter()
 	if kills >= 3 and not quest_reward_claimed:
 		quest_reward_claimed = true
 		player_xp += 60
@@ -285,6 +319,25 @@ func _mob_spawn_position(index: int) -> Vector2:
 		Vector2(950, 300), Vector2(370, 445)
 	]
 	return spawn_positions[index % spawn_positions.size()]
+
+func _ensure_guardian_encounter() -> void:
+	if kills < 5 or guardian_defeated:
+		return
+	for mob in mobs:
+		if String(mob["name"]) == "Ruin Guardian":
+			return
+	mobs.append({
+		"name": "Ruin Guardian",
+		"pos": Vector2(1010, 235),
+		"hp": 240,
+		"max_hp": 240,
+		"damage": 17,
+		"speed": 29.0,
+		"xp": 120,
+		"alive": true,
+		"boss": true
+	})
+	_add_floating_message("RUIN GUARDIAN AWAKENS", Vector2(WORLD_SIZE.x * 0.5, 190), Color("#c7a5ff"))
 
 func _spawn_loot_drop(drop_position: Vector2, drop_type: String, amount: int) -> void:
 	loot_drops.append({
@@ -407,6 +460,7 @@ func _save_progress() -> void:
 		"kills": kills,
 		"quest_reward_claimed": quest_reward_claimed,
 		"second_quest_reward_claimed": second_quest_reward_claimed,
+		"guardian_defeated": guardian_defeated,
 		"weapon_tier": weapon_tier,
 		"armor_tier": armor_tier,
 		"herbs": herbs,
@@ -436,6 +490,7 @@ func _load_progress() -> void:
 	kills = maxi(0, int(parsed.get("kills", 0)))
 	quest_reward_claimed = bool(parsed.get("quest_reward_claimed", false))
 	second_quest_reward_claimed = bool(parsed.get("second_quest_reward_claimed", false))
+	guardian_defeated = bool(parsed.get("guardian_defeated", false))
 	weapon_tier = clampi(int(parsed.get("weapon_tier", 0)), 0, 5)
 	armor_tier = clampi(int(parsed.get("armor_tier", 0)), 0, 5)
 	herbs = maxi(0, int(parsed.get("herbs", 0)))
@@ -557,11 +612,18 @@ func _draw_mobs() -> void:
 		if not mob["alive"]:
 			continue
 		var mob_pos: Vector2 = mob["pos"]
-		var is_wolf := String(mob["name"]) == "Ash Wolf"
-		var body_color := Color("#8e6553") if is_wolf else (Color("#887d9c") if String(mob["name"]) == "Ruins Stalker" else Color("#a58a53"))
+		var mob_name := String(mob["name"])
+		var is_wolf := mob_name == "Ash Wolf"
+		var is_guardian := mob_name == "Ruin Guardian"
+		var body_color := Color("#8e6553") if is_wolf else (Color("#887d9c") if mob_name == "Ruins Stalker" else (Color("#b95f49") if is_guardian else Color("#a58a53")))
 		if float(mob.get("hit_flash", 0.0)) > 0.0:
 			body_color = Color("#fff0d4")
-		draw_circle(mob_pos + Vector2(1, 10), 15.0, Color(0.02, 0.025, 0.02, 0.35))
+		draw_circle(mob_pos + Vector2(1, 10), 23.0 if is_guardian else 15.0, Color(0.02, 0.025, 0.02, 0.35))
+		if is_guardian:
+			var guardian_glow := 0.22 + 0.12 * sin(elapsed * 3.0)
+			var guardian_color := Color("#d36b55")
+			guardian_color.a = guardian_glow
+			draw_arc(mob_pos, 29.0 + sin(elapsed * 2.4) * 2.0, 0.0, TAU, 36, guardian_color, 4.0, true)
 		var threat_distance := player_position.distance_to(mob_pos)
 		if threat_distance <= 76.0:
 			var warning_color := Color("#e36b5d")
@@ -569,23 +631,28 @@ func _draw_mobs() -> void:
 			draw_arc(mob_pos + Vector2(0, 3), 20.0 + 2.0 * sin(elapsed * 8.0), 0.0, TAU, 28, warning_color, 2.5, true)
 		var attack_windup := float(mob.get("attack_windup", 0.0))
 		if attack_windup > 0.0:
-			var windup_progress := 1.0 - clampf(attack_windup / 0.42, 0.0, 1.0)
+			var windup_duration := 0.42
+			if mob_name == "Ruins Stalker":
+				windup_duration = 0.72
+			elif is_guardian:
+				windup_duration = 0.92
+			var windup_progress := 1.0 - clampf(attack_windup / windup_duration, 0.0, 1.0)
 			var telegraph_color := Color("#ffb45c")
 			telegraph_color.a = 0.75 + 0.25 * sin(elapsed * 18.0)
 			draw_arc(mob_pos + Vector2(0, 3), 26.0, -PI * 0.5, -PI * 0.5 + TAU * windup_progress, 32, telegraph_color, 4.0, true)
-		if String(mob["name"]) == "Ruins Stalker":
+		if mob_name == "Ruins Stalker":
 			var rune_glow := 0.35 + 0.22 * sin(elapsed * 3.2 + mob_pos.x * 0.02)
 			var rune_color := Color("#ad8bf0")
 			rune_color.a = rune_glow
 			draw_arc(mob_pos + Vector2(0, 2), 16.0 + sin(elapsed * 4.0) * 1.5, 0.0, TAU, 24, rune_color, 2.0, true)
-		draw_circle(mob_pos, 13.0, body_color)
-		draw_circle(mob_pos + Vector2(-4, -5), 4.0, body_color.lightened(0.22))
-		draw_circle(mob_pos + Vector2(-4, -2), 2.0, Color("#e3b36b"))
-		draw_circle(mob_pos + Vector2(4, -2), 2.0, Color("#e3b36b"))
-		var bar_width := 34.0
+		draw_circle(mob_pos, 21.0 if is_guardian else 13.0, body_color)
+		draw_circle(mob_pos + Vector2(-4, -5), 7.0 if is_guardian else 4.0, body_color.lightened(0.22))
+		draw_circle(mob_pos + Vector2(-5, -2), 3.0, Color("#ffd27b") if is_guardian else Color("#e3b36b"))
+		draw_circle(mob_pos + Vector2(5, -2), 3.0, Color("#ffd27b") if is_guardian else Color("#e3b36b"))
+		var bar_width := 58.0 if is_guardian else 34.0
 		draw_rect(Rect2(mob_pos + Vector2(-bar_width / 2.0, -24), Vector2(bar_width, 4)), Color("#241e1d"))
 		draw_rect(Rect2(mob_pos + Vector2(-bar_width / 2.0, -24), Vector2(bar_width * clampf(float(mob["hp"]) / float(mob["max_hp"]), 0.0, 1.0), 4)), Color("#b94d45"))
-		draw_string(ThemeDB.fallback_font, mob_pos + Vector2(-27, -30), String(mob["name"]), HORIZONTAL_ALIGNMENT_LEFT, 70, 9, Color("#ded2bd"))
+		draw_string(ThemeDB.fallback_font, mob_pos + Vector2(-40 if is_guardian else -27, -34 if is_guardian else -30), mob_name, HORIZONTAL_ALIGNMENT_LEFT, 100 if is_guardian else 70, 11 if is_guardian else 9, Color("#f0c6b4") if is_guardian else Color("#ded2bd"))
 
 func _draw_loot_drops() -> void:
 	for drop in loot_drops:
