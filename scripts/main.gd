@@ -179,7 +179,9 @@ func _try_attack() -> void:
 	if target_index == -1:
 		return
 	var target: Dictionary = mobs[target_index]
-	target["hp"] = int(target["hp"]) - (20 + weapon_tier * 8 + weapon_enchant * 4)
+	var damage := 20 + weapon_tier * 8 + weapon_enchant * 4
+	target["hp"] = int(target["hp"]) - damage
+	_add_floating_message("-%d" % damage, Vector2(target["pos"]) + Vector2(0, -36), Color("#f2b0a0"))
 	if int(target["hp"]) <= 0:
 		_defeat_mob(target)
 	_save_progress()
@@ -194,7 +196,9 @@ func _try_skill() -> void:
 		if not mob["alive"]:
 			continue
 		if player_position.distance_to(mob["pos"]) <= 150.0:
-			mob["hp"] = int(mob["hp"]) - (35 + weapon_tier * 5 + weapon_enchant * 3)
+			var damage := 35 + weapon_tier * 5 + weapon_enchant * 3
+			mob["hp"] = int(mob["hp"]) - damage
+			_add_floating_message("-%d" % damage, Vector2(mob["pos"]) + Vector2(0, -36), Color("#a8d8ef"))
 			hit_any = true
 			if int(mob["hp"]) <= 0:
 				_defeat_mob(mob)
@@ -580,6 +584,7 @@ func _draw_hud() -> void:
 	draw_string(ThemeDB.fallback_font, attack_center + Vector2(-28, 5), "ATTACK", HORIZONTAL_ALIGNMENT_LEFT, 80, 15, Color("#f0dfc4"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 144), "ARMOR reduces damage • SKILL cooldown %.1fs" % skill_cooldown, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 164), "HERBS %d   POTIONS %d   RELIC SHARDS %d" % [herbs, potions, relic_shards], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
+	draw_string(ThemeDB.fallback_font, Vector2(42, 184), "DAMAGE %d  •  ARMOR %d  •  RANGE 88" % [20 + weapon_tier * 8 + weapon_enchant * 4, armor_tier * 2 + armor_enchant * 2], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d7c59f"))
 	var forge_weapon_center := _forge_weapon_button_center()
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color("#c49a62"), false, 2.0)
