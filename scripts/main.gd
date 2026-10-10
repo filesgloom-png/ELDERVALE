@@ -17,9 +17,13 @@ var player_level := 1
 var player_xp := 0
 var player_coins := 0
 var kills := 0
-var quest_reward_claimed := false
 var attack_cooldown := 0.0
+var skill_cooldown := 0.0
 var mob_attack_cooldown := 0.0
+var weapon_tier := 0
+var armor_tier := 0
+var quest_reward_claimed := false
+var second_quest_reward_claimed := false
 var mobs: Array[Dictionary] = []
 var save_path := "user://eldervale_save.json"
 
@@ -31,6 +35,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	elapsed += delta
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
+	skill_cooldown = maxf(skill_cooldown - delta, 0.0)
 	mob_attack_cooldown = maxf(mob_attack_cooldown - delta, 0.0)
 	if Input.is_action_just_pressed("ui_accept"):
 		_try_attack()
@@ -44,19 +49,48 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_Q:
+			_buy_weapon()
+		elif event.keycode == KEY_E:
+			_buy_armor()
+		elif event.keycode == KEY_F:
+			_try_skill()
 	if event is InputEventScreenTouch:
 		if event.pressed and event.position.x < WORLD_SIZE.x * 0.48 and event.position.y > WORLD_SIZE.y * 0.48:
 			joystick_active = true
 			joystick_touch_index = event.index
 			_update_joystick(event.position)
-		elif event.pressed and event.position.x >= WORLD_SIZE.x * 0.48 and event.position.y > WORLD_SIZE.y * 0.48:
-			_try_attack()
+		elif event.pressed:
+			_handle_action_touch(event.position)
 		elif not event.pressed and event.index == joystick_touch_index:
 			joystick_active = false
 			joystick_touch_index = -1
 			joystick_vector = Vector2.ZERO
 	elif event is InputEventScreenDrag and event.index == joystick_touch_index:
 		_update_joystick(event.position)
+
+func _handle_action_touch(screen_position: Vector2) -> void:
+	if screen_position.distance_to(_attack_button_center()) <= 58.0:
+		_try_attack()
+	elif screen_position.distance_to(_skill_button_center()) <= 58.0:
+		_try_skill()
+	elif screen_position.distance_to(_weapon_button_center()) <= 62.0:
+		_buy_weapon()
+	elif screen_position.distance_to(_armor_button_center()) <= 62.0:
+		_buy_armor()
+
+func _attack_button_center() -> Vector2:
+	return Vector2(WORLD_SIZE.x - 100.0, WORLD_SIZE.y - 110.0)
+
+func _skill_button_center() -> Vector2:
+	return Vector2(WORLD_SIZE.x - 230.0, WORLD_SIZE.y - 110.0)
+
+func _weapon_button_center() -> Vector2:
+	return Vector2(WORLD_SIZE.x - 490.0, WORLD_SIZE.y - 92.0)
+
+func _armor_button_center() -> Vector2:
+	return Vector2(WORLD_SIZE.x - 350.0, WORLD_SIZE.y - 92.0)
 
 func _spawn_initial_mobs() -> void:
 	mobs = [
@@ -68,8 +102,17 @@ func _spawn_initial_mobs() -> void:
 	]
 
 func _update_mobs(delta: float) -> void:
-	for mob in mobs:
+	for i in range(mobs.size()):
+		var mob: Dictionary = mobs[i]
 		if not mob["alive"]:
+			var respawn_timer := float(mob.get("respawn_timer", 0.0)) - delta
+			mob["respawn_timer"] = respawn_timer
+			if respawn_timer <= 0.0:
+				mob["alive"] = true
+				mob["hp"] = mob["max_hp"]
+				mob["pos"] = _mob_spawn_position(i)
+				mob.erase("respawn_timer")
+			mobs[i] = mob
 			continue
 		var mob_pos: Vector2 = mob["pos"]
 		var to_player := player_position - mob_pos
@@ -77,7 +120,7 @@ func _update_mobs(delta: float) -> void:
 			mob_pos += to_player.normalized() * float(mob["speed"]) * delta
 			mob["pos"] = mob_pos
 		elif to_player.length() <= 34.0 and mob_attack_cooldown <= 0.0:
-			player_hp -= int(mob["damage"])
+			player_hp -= maxi(1, int(mob["damage"]) - armor_tier * 2)
 			mob_attack_cooldown = 1.0
 			if player_hp <= 0:
 				player_hp = player_max_hp
@@ -101,19 +144,73 @@ func _try_attack() -> void:
 	if target_index == -1:
 		return
 	var target: Dictionary = mobs[target_index]
-	target["hp"] = int(target["hp"]) - 20
+	target["hp"] = int(target["hp"]) - (20 + weapon_tier * 8)
 	if int(target["hp"]) <= 0:
-		target["alive"] = false
-		kills += 1
-		player_coins += 2 + player_level
-		_gain_xp(int(target["xp"]))
-		if kills >= 3 and not quest_reward_claimed:
-			quest_reward_claimed = true
-			player_xp += 60
-			player_coins += 25
-			_process_level_ups()
+		_defeat_mob(target)
+	_save_progress()
+	queue_redraw()
+
+func _try_skill() -> void:
+	if skill_cooldown > 0.0:
+		return
+	skill_cooldown = 5.0
+	var hit_any := false
+	for mob in mobs:
+		if not mob["alive"]:
+			continue
+		if player_position.distance_to(mob["pos"]) <= 150.0:
+			mob["hp"] = int(mob["hp"]) - (35 + weapon_tier * 5)
+			hit_any = true
+			if int(mob["hp"]) <= 0:
+				_defeat_mob(mob)
+	if hit_any:
 		_save_progress()
 	queue_redraw()
+
+func _defeat_mob(mob: Dictionary) -> void:
+	if not mob["alive"]:
+		return
+	mob["alive"] = false
+	mob["respawn_timer"] = 8.0
+	kills += 1
+	player_coins += 3 + player_level
+	_gain_xp(int(mob["xp"]))
+	if kills >= 3 and not quest_reward_claimed:
+		quest_reward_claimed = true
+		player_xp += 60
+		player_coins += 25
+		_process_level_ups()
+	if kills >= 5 and not second_quest_reward_claimed:
+		second_quest_reward_claimed = true
+		player_xp += 100
+		player_coins += 50
+		_process_level_ups()
+	_save_progress()
+
+func _buy_weapon() -> void:
+	var cost := 25 + weapon_tier * 35
+	if weapon_tier >= 5 or player_coins < cost:
+		return
+	player_coins -= cost
+	weapon_tier += 1
+	_save_progress()
+	queue_redraw()
+
+func _buy_armor() -> void:
+	var cost := 25 + armor_tier * 35
+	if armor_tier >= 5 or player_coins < cost:
+		return
+	player_coins -= cost
+	armor_tier += 1
+	_save_progress()
+	queue_redraw()
+
+func _mob_spawn_position(index: int) -> Vector2:
+	var spawn_positions: Array[Vector2] = [
+		Vector2(690, 330), Vector2(770, 475), Vector2(555, 270),
+		Vector2(950, 300), Vector2(370, 445)
+	]
+	return spawn_positions[index % spawn_positions.size()]
 
 func _gain_xp(amount: int) -> void:
 	player_xp += amount
@@ -136,6 +233,9 @@ func _save_progress() -> void:
 		"coins": player_coins,
 		"kills": kills,
 		"quest_reward_claimed": quest_reward_claimed,
+		"second_quest_reward_claimed": second_quest_reward_claimed,
+		"weapon_tier": weapon_tier,
+		"armor_tier": armor_tier,
 		"player_hp": player_hp,
 		"player_max_hp": player_max_hp
 	}
@@ -157,6 +257,9 @@ func _load_progress() -> void:
 	player_coins = maxi(0, int(parsed.get("coins", 0)))
 	kills = maxi(0, int(parsed.get("kills", 0)))
 	quest_reward_claimed = bool(parsed.get("quest_reward_claimed", false))
+	second_quest_reward_claimed = bool(parsed.get("second_quest_reward_claimed", false))
+	weapon_tier = clampi(int(parsed.get("weapon_tier", 0)), 0, 5)
+	armor_tier = clampi(int(parsed.get("armor_tier", 0)), 0, 5)
 	player_max_hp = maxi(100, int(parsed.get("player_max_hp", 100)))
 	player_hp = clampi(int(parsed.get("player_hp", player_max_hp)), 1, player_max_hp)
 
@@ -286,16 +389,33 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(43, 80, 300, 8), Color("#392b2b"))
 	draw_rect(Rect2(43, 80, 300.0 * float(player_hp) / float(player_max_hp), 8), Color("#b84d46"))
 	draw_string(ThemeDB.fallback_font, Vector2(43, 108), "XP %d / %d     COINS %d" % [player_xp, _xp_for_next_level(), player_coins], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d7c59f"))
-	draw_rect(Rect2(WORLD_SIZE.x - 286, 22, 264, 76), Color(0.035, 0.055, 0.05, 0.88))
-	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 267, 45), "QUEST: ASHEN FRONTIER", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#d7c59f"))
-	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 267, 65), "Defeat 3 creatures: %d / 3" % mini(kills, 3), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
-	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 267, 84), "Reward: 60 XP + 25 coins" if not quest_reward_claimed else "Quest complete  •  Reward claimed", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#aab5a1"))
+	draw_rect(Rect2(WORLD_SIZE.x - 310, 22, 288, 116), Color(0.035, 0.055, 0.05, 0.9))
+	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 45), "QUEST I: ASHEN FRONTIER", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#d7c59f"))
+	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 65), "Defeat 3: %d / 3" % mini(kills, 3), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
+	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 82), "60 XP + 25 coins" if not quest_reward_claimed else "Reward claimed", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#aab5a1"))
+	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 103), "QUEST II: HUNT 5  %d / 5" % mini(kills, 5), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d7c59f"))
+	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 123), "100 XP + 50 coins" if not second_quest_reward_claimed else "Reward claimed", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#aab5a1"))
 	draw_circle(JOYSTICK_CENTER, JOYSTICK_RADIUS, Color(0.02, 0.035, 0.03, 0.45))
 	draw_arc(JOYSTICK_CENTER, JOYSTICK_RADIUS, 0.0, TAU, 48, Color(0.75, 0.78, 0.68, 0.65), 2.0)
 	var knob_position := JOYSTICK_CENTER + joystick_vector * (JOYSTICK_RADIUS * 0.58)
 	draw_circle(knob_position, 25.0, Color(0.65, 0.68, 0.58, 0.76))
 	draw_arc(knob_position, 25.0, 0.0, TAU, 32, Color("#d6d4bd"), 2.0)
-	var attack_center := Vector2(WORLD_SIZE.x - 100.0, WORLD_SIZE.y - 110.0)
+	var weapon_center := _weapon_button_center()
+	draw_rect(Rect2(weapon_center - Vector2(58, 30), Vector2(116, 60)), Color(0.12, 0.16, 0.13, 0.88))
+	draw_rect(Rect2(weapon_center - Vector2(58, 30), Vector2(116, 60)), Color("#a6b68e"), false, 2.0)
+	draw_string(ThemeDB.fallback_font, weapon_center + Vector2(-49, -2), "WEAPON Q", HORIZONTAL_ALIGNMENT_LEFT, 100, 12, Color("#e7dfc8"))
+	draw_string(ThemeDB.fallback_font, weapon_center + Vector2(-49, 15), "T%d  %dG" % [weapon_tier, 25 + weapon_tier * 35], HORIZONTAL_ALIGNMENT_LEFT, 100, 11, Color("#d7c59f"))
+	var armor_center := _armor_button_center()
+	draw_rect(Rect2(armor_center - Vector2(58, 30), Vector2(116, 60)), Color(0.12, 0.16, 0.13, 0.88))
+	draw_rect(Rect2(armor_center - Vector2(58, 30), Vector2(116, 60)), Color("#a6b68e"), false, 2.0)
+	draw_string(ThemeDB.fallback_font, armor_center + Vector2(-49, -2), "ARMOR E", HORIZONTAL_ALIGNMENT_LEFT, 100, 12, Color("#e7dfc8"))
+	draw_string(ThemeDB.fallback_font, armor_center + Vector2(-49, 15), "T%d  %dG" % [armor_tier, 25 + armor_tier * 35], HORIZONTAL_ALIGNMENT_LEFT, 100, 11, Color("#d7c59f"))
+	var skill_center := _skill_button_center()
+	draw_circle(skill_center, 45.0, Color(0.17, 0.23, 0.28, 0.82))
+	draw_arc(skill_center, 45.0, 0.0, TAU, 48, Color("#8eb6c5"), 3.0)
+	draw_string(ThemeDB.fallback_font, skill_center + Vector2(-25, 4), "SKILL", HORIZONTAL_ALIGNMENT_LEFT, 70, 14, Color("#d7e8ed"))
+	var attack_center := _attack_button_center()
 	draw_circle(attack_center, 52.0, Color(0.28, 0.12, 0.10, 0.72))
 	draw_arc(attack_center, 52.0, 0.0, TAU, 48, Color("#d8a66d"), 3.0)
 	draw_string(ThemeDB.fallback_font, attack_center + Vector2(-28, 5), "ATTACK", HORIZONTAL_ALIGNMENT_LEFT, 80, 15, Color("#f0dfc4"))
+	draw_string(ThemeDB.fallback_font, Vector2(42, 144), "ARMOR reduces damage • SKILL cooldown %.1fs" % skill_cooldown, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#c5cfba"))
