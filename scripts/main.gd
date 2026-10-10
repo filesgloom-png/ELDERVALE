@@ -1998,6 +1998,10 @@ func _draw_mobs() -> void:
 					var marker_angle := TAU * float(marker_index) / 8.0 + elapsed * 0.8
 					var marker_direction := Vector2(cos(marker_angle), sin(marker_angle))
 					draw_line(mob_pos + marker_direction * 94.0, mob_pos + marker_direction * 108.0, Color("#ffd0a1"), 3.0)
+				var slam_duration := 0.82 if guardian_enraged else 1.15
+				var slam_progress := clampf(1.0 - slam_windup / slam_duration, 0.0, 1.0)
+				var charge_color := Color("#a5fff0") if is_memory_guardian else Color("#ffd0a1")
+				draw_arc(mob_pos, 91.0, -PI * 0.5, -PI * 0.5 + TAU * slam_progress, 48, charge_color, 6.0, true)
 				draw_string(ThemeDB.fallback_font, mob_pos + Vector2(-42, -66), "DODGE!", HORIZONTAL_ALIGNMENT_CENTER, 84, 16, Color("#ffd0a1"))
 		var threat_distance := player_position.distance_to(mob_pos)
 		if threat_distance <= 76.0:
