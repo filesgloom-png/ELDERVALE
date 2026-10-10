@@ -161,18 +161,30 @@ func _update_mobs(delta: float) -> void:
 		else:
 			mob.erase("hit_flash")
 		var to_player := player_position - mob_pos
-		if to_player.length() < 310.0 and to_player.length() > 30.0:
+		var local_attack_cooldown := maxf(float(mob.get("attack_cooldown", 0.0)) - delta, 0.0)
+		mob["attack_cooldown"] = local_attack_cooldown
+		var attack_windup := float(mob.get("attack_windup", 0.0))
+		if to_player.length() < 310.0 and to_player.length() > 34.0:
 			mob_pos += to_player.normalized() * float(mob["speed"]) * delta
 			mob["pos"] = mob_pos
-		elif to_player.length() <= 34.0 and mob_attack_cooldown <= 0.0:
-			var incoming_damage := maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2)
-			player_hp -= incoming_damage
-			player_hit_flash = 0.22
-			_add_floating_message("-%d" % incoming_damage, player_position + Vector2(0, -35), Color("#f28f82"))
-			mob_attack_cooldown = 1.0
-			if player_hp <= 0:
-				player_hp = player_max_hp
-				player_position = WORLD_SIZE * 0.5
+			mob["attack_windup"] = 0.0
+		elif to_player.length() <= 34.0:
+			if attack_windup > 0.0:
+				attack_windup = maxf(attack_windup - delta, 0.0)
+				mob["attack_windup"] = attack_windup
+				if attack_windup <= 0.0:
+					var incoming_damage := maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2)
+					player_hp -= incoming_damage
+					player_hit_flash = 0.22
+					_add_floating_message("-%d" % incoming_damage, player_position + Vector2(0, -35), Color("#f28f82"))
+					mob["attack_cooldown"] = 0.85
+					if player_hp <= 0:
+						player_hp = player_max_hp
+						player_position = WORLD_SIZE * 0.5
+			elif local_attack_cooldown <= 0.0:
+				mob["attack_windup"] = 0.42
+		else:
+			mob["attack_windup"] = 0.0
 		mob["pos"] = mob_pos
 
 func _try_attack() -> void:
@@ -538,6 +550,12 @@ func _draw_mobs() -> void:
 			var warning_color := Color("#e36b5d")
 			warning_color.a = 0.48 + 0.28 * sin(elapsed * 10.0)
 			draw_arc(mob_pos + Vector2(0, 3), 20.0 + 2.0 * sin(elapsed * 8.0), 0.0, TAU, 28, warning_color, 2.5, true)
+		var attack_windup := float(mob.get("attack_windup", 0.0))
+		if attack_windup > 0.0:
+			var windup_progress := 1.0 - clampf(attack_windup / 0.42, 0.0, 1.0)
+			var telegraph_color := Color("#ffb45c")
+			telegraph_color.a = 0.75 + 0.25 * sin(elapsed * 18.0)
+			draw_arc(mob_pos + Vector2(0, 3), 26.0, -PI * 0.5, -PI * 0.5 + TAU * windup_progress, 32, telegraph_color, 4.0, true)
 		draw_circle(mob_pos, 13.0, body_color)
 		draw_circle(mob_pos + Vector2(-4, -5), 4.0, body_color.lightened(0.22))
 		draw_circle(mob_pos + Vector2(-4, -2), 2.0, Color("#e3b36b"))
