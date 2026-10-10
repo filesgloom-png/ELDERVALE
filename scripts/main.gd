@@ -25,6 +25,8 @@ var dodge_time := 0.0
 var dodge_cooldown := 0.0
 var dodge_direction: Vector2 = Vector2.RIGHT
 var critical_flash := 0.0
+var combo_count := 0
+var combo_timer := 0.0
 var weapon_tier := 0
 var armor_tier := 0
 var herbs := 0
@@ -56,6 +58,9 @@ func _process(delta: float) -> void:
 	dodge_time = maxf(dodge_time - delta, 0.0)
 	dodge_cooldown = maxf(dodge_cooldown - delta, 0.0)
 	critical_flash = maxf(critical_flash - delta, 0.0)
+	combo_timer = maxf(combo_timer - delta, 0.0)
+	if combo_timer <= 0.0:
+		combo_count = 0
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	skill_cooldown = maxf(skill_cooldown - delta, 0.0)
 	mob_attack_cooldown = maxf(mob_attack_cooldown - delta, 0.0)
@@ -305,9 +310,17 @@ func _try_attack() -> void:
 	if target_index == -1:
 		return
 	var target: Dictionary = mobs[target_index]
+	combo_count += 1
+	combo_timer = 1.65
+	if combo_count == 3:
+		_add_floating_message("COMBO x3! +15%", player_position + Vector2(0, -68), Color("#b8e8a0"))
+	elif combo_count == 5:
+		_add_floating_message("COMBO x5! +35%", player_position + Vector2(0, -68), Color("#ffd56f"))
 	var slash_direction := (Vector2(target["pos"]) - player_position).normalized()
 	combat_effects.append({"kind": "slash", "pos": player_position, "dir": slash_direction, "life": 0.20, "duration": 0.20})
 	var damage := 20 + weapon_tier * 8 + weapon_enchant * 4
+	var combo_bonus := 0.35 if combo_count >= 5 else (0.15 if combo_count >= 3 else 0.0)
+	damage = int(round(float(damage) * (1.0 + combo_bonus)))
 	var critical_chance := minf(0.08 + float(weapon_enchant) * 0.04, 0.24)
 	var is_critical := randf() < critical_chance
 	if is_critical:
@@ -954,6 +967,10 @@ func _draw_hud() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(42, 164), "HERBS %d   POTIONS %d   RELIC SHARDS %d" % [herbs, potions, relic_shards], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 202), "GUARDIAN CORES %d   ANCIENT CACHES %d" % [guardian_cores, ancient_caches], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e7bd9a"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 184), "DMG %d  •  CRIT %d%%  •  ARMOR %d" % [20 + weapon_tier * 8 + weapon_enchant * 4, int(round(minf(0.08 + float(weapon_enchant) * 0.04, 0.24) * 100.0)), armor_tier * 2 + armor_enchant * 2], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d7c59f"))
+	var combo_bonus_percent := 35 if combo_count >= 5 else (15 if combo_count >= 3 else 0)
+	var combo_label := "COMBO x%d  •  +%d%% DAMAGE" % [combo_count, combo_bonus_percent] if combo_count > 0 else "COMBO: READY"
+	var combo_color := Color("#ffd56f") if combo_count >= 5 else (Color("#b8e8a0") if combo_count >= 3 else Color("#c5cfba"))
+	draw_string(ThemeDB.fallback_font, Vector2(465, 102), combo_label, HORIZONTAL_ALIGNMENT_CENTER, 350, 15, combo_color)
 	var forge_weapon_center := _forge_weapon_button_center()
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color("#c49a62"), false, 2.0)
