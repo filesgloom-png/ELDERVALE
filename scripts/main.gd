@@ -32,6 +32,7 @@ var second_quest_reward_claimed := false
 var mobs: Array[Dictionary] = []
 var loot_drops: Array[Dictionary] = []
 var floating_messages: Array[Dictionary] = []
+var hit_flash_timers: Dictionary = {}
 var save_path := "user://eldervale_save.json"
 
 func _ready() -> void:
@@ -150,6 +151,11 @@ func _update_mobs(delta: float) -> void:
 			mobs[i] = mob
 			continue
 		var mob_pos: Vector2 = mob["pos"]
+		var hit_flash := maxf(float(mob.get("hit_flash", 0.0)) - delta, 0.0)
+		if hit_flash > 0.0:
+			mob["hit_flash"] = hit_flash
+		else:
+			mob.erase("hit_flash")
 		var to_player := player_position - mob_pos
 		if to_player.length() < 310.0 and to_player.length() > 30.0:
 			mob_pos += to_player.normalized() * float(mob["speed"]) * delta
@@ -181,6 +187,7 @@ func _try_attack() -> void:
 	var target: Dictionary = mobs[target_index]
 	var damage := 20 + weapon_tier * 8 + weapon_enchant * 4
 	target["hp"] = int(target["hp"]) - damage
+	target["hit_flash"] = 0.18
 	_add_floating_message("-%d" % damage, Vector2(target["pos"]) + Vector2(0, -36), Color("#f2b0a0"))
 	if int(target["hp"]) <= 0:
 		_defeat_mob(target)
@@ -198,6 +205,7 @@ func _try_skill() -> void:
 		if player_position.distance_to(mob["pos"]) <= 150.0:
 			var damage := 35 + weapon_tier * 5 + weapon_enchant * 3
 			mob["hp"] = int(mob["hp"]) - damage
+			mob["hit_flash"] = 0.18
 			_add_floating_message("-%d" % damage, Vector2(mob["pos"]) + Vector2(0, -36), Color("#a8d8ef"))
 			hit_any = true
 			if int(mob["hp"]) <= 0:
@@ -502,6 +510,8 @@ func _draw_mobs() -> void:
 		var mob_pos: Vector2 = mob["pos"]
 		var is_wolf := String(mob["name"]) == "Ash Wolf"
 		var body_color := Color("#8e6553") if is_wolf else (Color("#887d9c") if String(mob["name"]) == "Ruins Stalker" else Color("#a58a53"))
+		if float(mob.get("hit_flash", 0.0)) > 0.0:
+			body_color = Color("#fff0d4")
 		draw_circle(mob_pos + Vector2(1, 10), 15.0, Color(0.02, 0.025, 0.02, 0.35))
 		draw_circle(mob_pos, 13.0, body_color)
 		draw_circle(mob_pos + Vector2(-4, -5), 4.0, body_color.lightened(0.22))
@@ -517,9 +527,10 @@ func _draw_loot_drops() -> void:
 		var p: Vector2 = drop["pos"]
 		var drop_type := String(drop["type"])
 		var color := Color("#e0bd68") if drop_type == "coins" else (Color("#8fbd75") if drop_type == "herbs" else Color("#b58be0"))
+		var pulse := 1.0 + 0.14 * sin(elapsed * 5.0 + float(p[0] + p[1]) * 0.03)
 		draw_circle(p + Vector2(0, 5), 9.0, Color(0.02, 0.025, 0.02, 0.32))
-		draw_circle(p, 7.0, color)
-		draw_arc(p, 7.0, 0.0, TAU, 20, color.lightened(0.45), 2.0)
+		draw_circle(p, 7.0 * pulse, color)
+		draw_arc(p, 8.0 * pulse, 0.0, TAU, 20, color.lightened(0.45), 2.0)
 		var glyph := "G" if drop_type == "coins" else ("H" if drop_type == "herbs" else "R")
 		draw_string(ThemeDB.fallback_font, p + Vector2(-3, 3), glyph, HORIZONTAL_ALIGNMENT_LEFT, 8, 8, Color("#22231d"))
 
