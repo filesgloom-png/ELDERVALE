@@ -18,6 +18,39 @@ const CLASS_DATA := [
 	{"name": "Engineer", "specs": ["Tinkerer", "Artillerist", "Aegis Smith"], "damage": 1.05, "crit": 0.0, "armor": 1, "skill": 1.08, "range": 88.0, "kill_heal": 0, "dodge_cd": 2.8}
 ]
 
+const ULTIMATE_DATA := {
+	"Warden": {"name": "Aegis of Dawn", "power": 1.10, "radius": 210.0, "heal": 12},
+	"Weaponmaster": {"name": "Blade Tempest", "power": 1.42, "radius": 205.0, "heal": 0},
+	"Champion": {"name": "Heroic Breaker", "power": 1.58, "radius": 190.0, "heal": 0},
+	"Reaver": {"name": "Rend the Weak", "power": 1.40, "radius": 200.0, "heal": 0},
+	"Bloodfury": {"name": "Blood Eclipse", "power": 1.48, "radius": 215.0, "heal": 8},
+	"Juggernaut": {"name": "Cataclysm Slam", "power": 1.30, "radius": 225.0, "heal": 10},
+	"Shadow": {"name": "Umbral Execution", "power": 1.48, "radius": 190.0, "heal": 0},
+	"Executioner": {"name": "Final Verdict", "power": 1.45, "radius": 200.0, "heal": 0},
+	"Phantom": {"name": "Hundredfold Echo", "power": 1.25, "radius": 235.0, "heal": 0},
+	"Pathfinder": {"name": "Storm of Arrows", "power": 1.25, "radius": 275.0, "heal": 0},
+	"Beastmaster": {"name": "Primal Pack", "power": 1.30, "radius": 230.0, "heal": 12},
+	"Deadeye": {"name": "Deadeye Barrage", "power": 1.62, "radius": 300.0, "heal": 0},
+	"Elementalist": {"name": "Primal Convergence", "power": 1.58, "radius": 285.0, "heal": 0},
+	"Spellblade": {"name": "Arcane Sever", "power": 1.42, "radius": 205.0, "heal": 0},
+	"Archmage": {"name": "Astral Cataclysm", "power": 1.72, "radius": 300.0, "heal": 0},
+	"Lich": {"name": "Harvest of Souls", "power": 1.38, "radius": 235.0, "heal": 8},
+	"Soulweaver": {"name": "Soul Requiem", "power": 1.12, "radius": 245.0, "heal": 24},
+	"Gravecaller": {"name": "Gravewake", "power": 1.48, "radius": 255.0, "heal": 6},
+	"Inquisitor": {"name": "Judgment of Ash", "power": 1.50, "radius": 220.0, "heal": 8},
+	"Justicar": {"name": "Sanctuary Ascendant", "power": 1.08, "radius": 215.0, "heal": 28},
+	"Sunkeeper": {"name": "Solar Dominion", "power": 1.52, "radius": 250.0, "heal": 16},
+	"Shapebinder": {"name": "Wildshape Colossus", "power": 1.38, "radius": 220.0, "heal": 8},
+	"Stormcaller": {"name": "Tempest Crown", "power": 1.55, "radius": 285.0, "heal": 0},
+	"Grovekeeper": {"name": "Heart of the Green", "power": 1.08, "radius": 240.0, "heal": 30},
+	"Way of the Fist": {"name": "Sevenfold Impact", "power": 1.48, "radius": 185.0, "heal": 0},
+	"Way of the Gale": {"name": "Cyclone Step", "power": 1.32, "radius": 240.0, "heal": 0},
+	"Way of Balance": {"name": "Perfect Equilibrium", "power": 1.22, "radius": 220.0, "heal": 18},
+	"Tinkerer": {"name": "Overclock Protocol", "power": 1.35, "radius": 220.0, "heal": 0},
+	"Artillerist": {"name": "Siegebreaker Salvo", "power": 1.70, "radius": 300.0, "heal": 0},
+	"Aegis Smith": {"name": "Adamant Bastion", "power": 1.18, "radius": 220.0, "heal": 20}
+}
+
 var player_position: Vector2 = WORLD_SIZE * 0.5
 var move_vector: Vector2 = Vector2.ZERO
 var joystick_vector: Vector2 = Vector2.ZERO
@@ -36,6 +69,7 @@ var player_coins := 0
 var kills := 0
 var attack_cooldown := 0.0
 var skill_cooldown := 0.0
+var ultimate_charge := 0.0
 var mob_attack_cooldown := 0.0
 var player_hit_flash := 0.0
 var dodge_time := 0.0
@@ -106,6 +140,8 @@ func _input(event: InputEvent) -> void:
 			_buy_armor()
 		elif event.keycode == KEY_F:
 			_try_skill()
+		elif event.keycode == KEY_B:
+			_try_ultimate()
 		elif event.keycode == KEY_C:
 			_craft_potion()
 		elif event.keycode == KEY_R:
@@ -153,6 +189,8 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 		_try_attack()
 	elif screen_position.distance_to(_skill_button_center()) <= 58.0:
 		_try_skill()
+	elif screen_position.distance_to(_ultimate_button_center()) <= 60.0:
+		_try_ultimate()
 	elif screen_position.distance_to(_weapon_button_center()) <= 62.0:
 		_buy_weapon()
 	elif screen_position.distance_to(_armor_button_center()) <= 62.0:
@@ -317,6 +355,9 @@ func _attack_button_center() -> Vector2:
 
 func _skill_button_center() -> Vector2:
 	return Vector2(WORLD_SIZE.x - 230.0, WORLD_SIZE.y - 110.0)
+
+func _ultimate_button_center() -> Vector2:
+	return Vector2(WORLD_SIZE.x - 405.0, WORLD_SIZE.y - 230.0)
 
 func _weapon_button_center() -> Vector2:
 	return Vector2(WORLD_SIZE.x - 490.0, WORLD_SIZE.y - 92.0)
@@ -498,6 +539,7 @@ func _try_attack() -> void:
 		_add_floating_message("COMBO x3! +15%", player_position + Vector2(0, -68), Color("#b8e8a0"))
 	elif combo_count == 5:
 		_add_floating_message("COMBO x5! +35%", player_position + Vector2(0, -68), Color("#ffd56f"))
+	ultimate_charge = minf(100.0, ultimate_charge + 12.0)
 	var slash_direction := (Vector2(target["pos"]) - player_position).normalized()
 	combat_effects.append({"kind": "slash", "pos": player_position, "dir": slash_direction, "life": 0.20, "duration": 0.20})
 	var class_data := _current_class_data()
@@ -571,10 +613,54 @@ func _try_skill() -> void:
 			mob["hit_flash"] = 0.18
 			combat_effects.append({"kind": "hit", "pos": Vector2(mob["pos"]), "life": 0.18, "duration": 0.18})
 			hit_any = true
+			ultimate_charge = minf(100.0, ultimate_charge + 15.0)
 			if int(mob["hp"]) <= 0:
 				_defeat_mob(mob)
 	if hit_any:
 		_save_progress()
+	queue_redraw()
+
+func _try_ultimate() -> void:
+	if ultimate_charge < 100.0:
+		_add_floating_message("ULTIMATE %d%%" % int(ultimate_charge), player_position + Vector2(0, -60), Color("#d7c59f"))
+		return
+	var class_data := _current_class_data()
+	var spec_data := _current_specialization_data()
+	var spec_name := String((class_data["specs"] as Array)[specialization_index])
+	var ultimate: Dictionary = ULTIMATE_DATA.get(spec_name, {"name": "Ascendant Strike", "power": 1.25, "radius": 220.0, "heal": 0})
+	ultimate_charge = 0.0
+	var radius := float(ultimate["radius"])
+	var power := float(ultimate["power"])
+	var base_damage := float(70 + weapon_tier * 10 + weapon_enchant * 5)
+	combat_effects.append({"kind": "ultimate", "pos": player_position, "life": 0.72, "duration": 0.72})
+	_add_floating_message(String(ultimate["name"]) + "!", player_position + Vector2(0, -76), Color("#ffd28b"))
+	var hit_count := 0
+	for mob in mobs:
+		if not bool(mob.get("alive", false)):
+			continue
+		if player_position.distance_to(Vector2(mob["pos"])) > radius:
+			continue
+		var damage := int(round(base_damage * power * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0))))
+		if spec_name == "Executioner" and float(mob["hp"]) / maxf(1.0, float(mob["max_hp"])) <= 0.35:
+			damage = int(round(float(damage) * 1.5))
+		elif spec_name == "Bloodfury" and float(player_hp) / float(player_max_hp) <= 0.5:
+			damage = int(round(float(damage) * 1.25))
+		mob["hp"] = int(mob["hp"]) - damage
+		mob["hit_flash"] = 0.32
+		combat_effects.append({"kind": "hit", "pos": Vector2(mob["pos"]), "life": 0.26, "duration": 0.26})
+		_add_floating_message("ULT -%d" % damage, Vector2(mob["pos"]) + Vector2(0, -58), Color("#ffd28b"))
+		hit_count += 1
+		if int(mob["hp"]) <= 0:
+			_defeat_mob(mob)
+	var heal_amount := int(ultimate["heal"])
+	if hit_count > 0 and heal_amount > 0:
+		var old_hp := player_hp
+		player_hp = mini(player_max_hp, player_hp + heal_amount)
+		if player_hp > old_hp:
+			_add_floating_message("ULTIMATE HEAL +%d" % (player_hp - old_hp), player_position + Vector2(0, -48), Color("#a8e6a0"))
+	if hit_count == 0:
+		_add_floating_message("NO TARGETS IN RANGE", player_position + Vector2(0, -52), Color("#e6b2a5"))
+	_save_progress()
 	queue_redraw()
 
 func _defeat_mob(mob: Dictionary) -> void:
@@ -1101,6 +1187,15 @@ func _draw_combat_effects() -> void:
 				var ray_direction := Vector2(cos(ray_angle), sin(ray_angle))
 				draw_line(critical_center + ray_direction * (8.0 + progress * 5.0), critical_center + ray_direction * (24.0 + progress * 16.0), critical_color, 3.0)
 			draw_arc(critical_center, 18.0 + progress * 22.0, 0.0, TAU, 28, critical_color, 2.5, true)
+		elif String(effect["kind"]) == "ultimate":
+			var ultimate_color := Color("#ffd28b")
+			ultimate_color.a = (1.0 - progress) * 0.88
+			var ultimate_center: Vector2 = effect["pos"]
+			for ray_index in range(16):
+				var ray_angle := TAU * float(ray_index) / 16.0 + progress * 0.18
+				var ray_direction := Vector2(cos(ray_angle), sin(ray_angle))
+				draw_line(ultimate_center + ray_direction * (18.0 + progress * 20.0), ultimate_center + ray_direction * (72.0 + progress * 170.0), ultimate_color, 3.0)
+			draw_arc(ultimate_center, 34.0 + progress * 205.0, 0.0, TAU, 64, ultimate_color, 5.0 - progress * 2.0, true)
 		elif String(effect["kind"]) == "dodge":
 			var direction: Vector2 = effect["dir"]
 			var dodge_color := Color("#9fe6ef")
@@ -1187,6 +1282,12 @@ func _draw_hud() -> void:
 	draw_circle(skill_center, 45.0, Color(0.17, 0.23, 0.28, 0.82))
 	draw_arc(skill_center, 45.0, 0.0, TAU, 48, Color("#8eb6c5"), 3.0)
 	draw_string(ThemeDB.fallback_font, skill_center + Vector2(-25, 4), "SKILL", HORIZONTAL_ALIGNMENT_LEFT, 70, 14, Color("#d7e8ed"))
+	var ultimate_center := _ultimate_button_center()
+	draw_circle(ultimate_center, 49.0, Color(0.25, 0.17, 0.07, 0.9))
+	draw_arc(ultimate_center, 49.0, 0.0, TAU * ultimate_charge / 100.0, 48, Color("#ffd28b"), 5.0, true)
+	draw_arc(ultimate_center, 49.0, 0.0, TAU, 48, Color("#9c7b48"), 2.0)
+	draw_string(ThemeDB.fallback_font, ultimate_center + Vector2(-37, -3), "ULTIMATE", HORIZONTAL_ALIGNMENT_LEFT, 78, 11, Color("#ffe8b0"))
+	draw_string(ThemeDB.fallback_font, ultimate_center + Vector2(-22, 14), "%d%% [B]" % int(ultimate_charge), HORIZONTAL_ALIGNMENT_LEFT, 60, 11, Color("#ffd28b") if ultimate_charge >= 100.0 else Color("#d7c59f"))
 	var attack_center := _attack_button_center()
 	draw_circle(attack_center, 52.0, Color(0.28, 0.12, 0.10, 0.72))
 	draw_arc(attack_center, 52.0, 0.0, TAU, 48, Color("#d8a66d"), 3.0)
