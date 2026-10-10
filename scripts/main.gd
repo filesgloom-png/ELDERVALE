@@ -4,6 +4,7 @@ const WORLD_SIZE := Vector2(1280.0, 720.0)
 const JOYSTICK_CENTER := Vector2(112.0, 600.0)
 const JOYSTICK_RADIUS := 68.0
 const PLAYER_SPEED := 245.0
+const MAX_PLAYER_LEVEL := 100
 const CLASS_DATA := [
 	{"name": "Warrior", "specs": ["Warden", "Weaponmaster", "Champion"], "damage": 1.08, "crit": 0.0, "armor": 2, "skill": 1.0, "range": 88.0, "kill_heal": 0, "dodge_cd": 2.8},
 	{"name": "Berserker", "specs": ["Reaver", "Bloodfury", "Juggernaut"], "damage": 1.12, "crit": 0.0, "armor": 0, "skill": 1.0, "range": 88.0, "kill_heal": 0, "dodge_cd": 2.8},
@@ -603,14 +604,12 @@ func _defeat_mob(mob: Dictionary) -> void:
 		_add_floating_message("CLASS HEAL +%d" % class_kill_heal, player_position + Vector2(0, -46), Color("#a8e6a0"))
 	if kills >= 3 and not quest_reward_claimed:
 		quest_reward_claimed = true
-		player_xp += 60
+		_gain_xp(60)
 		player_coins += 25
-		_process_level_ups()
 	if kills >= 5 and not second_quest_reward_claimed:
 		second_quest_reward_claimed = true
-		player_xp += 100
+		_gain_xp(100)
 		player_coins += 50
-		_process_level_ups()
 	_save_progress()
 
 func _buy_weapon() -> void:
@@ -808,11 +807,13 @@ func _use_potion() -> void:
 	queue_redraw()
 
 func _gain_xp(amount: int) -> void:
+	if amount <= 0 or player_level >= MAX_PLAYER_LEVEL:
+		return
 	player_xp += amount
 	_process_level_ups()
 
 func _process_level_ups() -> void:
-	while player_xp >= _xp_for_next_level():
+	while player_level < MAX_PLAYER_LEVEL and player_xp >= _xp_for_next_level():
 		player_xp -= _xp_for_next_level()
 		player_level += 1
 		player_max_hp += 12
@@ -821,8 +822,13 @@ func _process_level_ups() -> void:
 			_add_floating_message("TALENT POINT +1", player_position + Vector2(0, -88), Color("#b8e8a0"))
 		player_hp = player_max_hp
 		_add_floating_message("LEVEL UP!  %d" % player_level, player_position + Vector2(0, -68), Color("#f2d58b"))
+	if player_level >= MAX_PLAYER_LEVEL:
+		player_xp = 0
+		_add_floating_message("MAX LEVEL REACHED", player_position + Vector2(0, -92), Color("#ffd28b"))
 
 func _xp_for_next_level() -> int:
+	if player_level >= MAX_PLAYER_LEVEL:
+		return 0
 	return 50 + (player_level - 1) * 35
 
 func _save_progress() -> void:
