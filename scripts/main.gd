@@ -532,13 +532,24 @@ func _try_skill() -> void:
 	skill_cooldown = maxf(1.8, 5.0 + float(spec_data.get("cooldown", 0.0)) - float(talent_ranks[2]) * 0.12)
 	combat_effects.append({"kind": "pulse", "pos": player_position, "life": 0.34, "duration": 0.34})
 	var hit_any := false
+	var spec_name := String((class_data["specs"] as Array)[specialization_index])
+	var skill_radius := 150.0
+	if spec_name == "Elementalist" or spec_name == "Artillerist" or spec_name == "Stormcaller":
+		skill_radius = 190.0
+	elif spec_name == "Deadeye" or spec_name == "Pathfinder":
+		skill_radius = 165.0
 	for mob in mobs:
 		if not mob["alive"]:
 			continue
-		if player_position.distance_to(mob["pos"]) <= 150.0:
+		if player_position.distance_to(mob["pos"]) <= skill_radius:
 			var talent_bonus := _current_talent_bonus()
 			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0)) * float(talent_bonus["skill"])))
-			var critical_chance := minf(0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5, 0.24)
+			var critical_chance := minf(0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5 + float(spec_data.get("crit", 0.0)) + float(_current_talent_bonus()["crit"]), 0.30)
+			if spec_name == "Executioner" and float(mob["hp"]) / maxf(1.0, float(mob["max_hp"])) <= 0.35:
+				damage = int(round(float(damage) * 1.35))
+				_add_floating_message("EXECUTE!", Vector2(mob["pos"]) + Vector2(0, -66), Color("#ff8b78"))
+			if spec_name == "Bloodfury" and float(player_hp) / float(player_max_hp) <= 0.5:
+				damage = int(round(float(damage) * 1.2))
 			var is_critical := randf() < critical_chance
 			if is_critical:
 				damage = int(round(float(damage) * 1.5))
@@ -548,6 +559,14 @@ func _try_skill() -> void:
 			else:
 				_add_floating_message("-%d" % damage, Vector2(mob["pos"]) + Vector2(0, -36), Color("#a8d8ef"))
 			mob["hp"] = int(mob["hp"]) - damage
+			if spec_name == "Soulweaver" or spec_name == "Grovekeeper" or spec_name == "Justicar":
+				var heal_amount := 7 if spec_name == "Soulweaver" else (6 if spec_name == "Grovekeeper" else 4)
+				var old_hp := player_hp
+				player_hp = mini(player_max_hp, player_hp + heal_amount)
+				if player_hp > old_hp:
+					_add_floating_message("HEAL +%d" % (player_hp - old_hp), player_position + Vector2(0, -52), Color("#a8e6a0"))
+			if spec_name == "Warden" or spec_name == "Juggernaut" or spec_name == "Aegis Smith":
+				player_hp = mini(player_max_hp, player_hp + 2)
 			mob["hit_flash"] = 0.18
 			combat_effects.append({"kind": "hit", "pos": Vector2(mob["pos"]), "life": 0.18, "duration": 0.18})
 			hit_any = true
