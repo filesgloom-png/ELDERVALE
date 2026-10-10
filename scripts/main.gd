@@ -358,6 +358,14 @@ func _current_talent_bonus() -> Dictionary:
 		"heal": talent_ranks[2]
 	}
 
+func _current_equipment_set_bonus() -> Dictionary:
+	var bonus := {"name": "UNBOUND", "damage": 1.0, "armor": 0, "crit": 0.0, "heal": 0}
+	if weapon_enchant >= 2 and armor_enchant >= 2:
+		bonus = {"name": "RUINFORGED 2/2", "damage": 1.05, "armor": 2, "crit": 0.02, "heal": 1}
+	if weapon_enchant >= 4 and armor_enchant >= 4:
+		bonus = {"name": "ANCIENT GUARDIAN 2/2", "damage": 1.08, "armor": 4, "crit": 0.04, "heal": 2}
+	return bonus
+
 func _spend_talent(branch: int) -> void:
 	if talent_points <= 0 or branch < 0 or branch >= talent_ranks.size() or talent_ranks[branch] >= 5:
 		_add_floating_message("NO TALENT POINTS / MAX RANK", player_position + Vector2(0, -56), Color("#e6b2a5"))
@@ -546,7 +554,8 @@ func _apply_incoming_damage(raw_damage: int, label: String) -> void:
 		combat_effects.append({"kind": "dodge", "pos": player_position, "dir": dodge_direction, "life": 0.28, "duration": 0.28})
 		_show_passive_proc("PASSIVE: %s • EVADE" % String(passive.get("name", "DODGE")), player_position, Color("#9fe6ef"))
 		return
-	var armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"]) + int(passive.get("armor", 0))
+	var set_bonus := _current_equipment_set_bonus()
+	var armor_bonus := int(_current_class_data().get("armor", 0)) + int(_current_specialization_data().get("armor", 0)) + int(_current_talent_bonus()["armor"]) + int(passive.get("armor", 0)) + int(set_bonus["armor"])
 	var reduction := clampf(float(passive.get("damage_reduce", 0.0)), 0.0, 0.08)
 	var damage := maxi(1, int(round(float(maxi(1, raw_damage - armor_tier * 2 - armor_enchant * 2 - armor_bonus)) * (1.0 - reduction))))
 	player_hp -= damage
@@ -593,13 +602,14 @@ func _try_attack() -> void:
 	var talent_bonus := _current_talent_bonus()
 	var passive := _current_passive_data()
 	var passive_attack_multiplier := clampf(float(passive.get("attack", 1.0)), 0.90, 1.16)
-	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0)) * float(spec_data.get("damage", 1.0)) * passive_attack_multiplier * float(talent_bonus["damage"])))
+	var set_bonus := _current_equipment_set_bonus()
+	var damage := int(round(float(20 + weapon_tier * 8 + weapon_enchant * 4) * float(class_data.get("damage", 1.0)) * float(spec_data.get("damage", 1.0)) * passive_attack_multiplier * float(talent_bonus["damage"]) * float(set_bonus["damage"])))
 	if String(class_data["name"]) == "Berserker" and float(player_hp) / float(player_max_hp) <= 0.4:
 		damage = int(round(float(damage) * 1.25))
 	var combo_bonus := 0.35 if combo_count >= 5 else (0.15 if combo_count >= 3 else 0.0)
 	combo_bonus += float(passive.get("combo", 0.0)) if combo_count >= 3 else 0.0
 	damage = int(round(float(damage) * (1.0 + combo_bonus)))
-	var critical_chance := minf(0.45, 0.08 + float(weapon_enchant) * 0.04 + float(class_data.get("crit", 0.0)) + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)))
+	var critical_chance := minf(0.45, 0.08 + float(weapon_enchant) * 0.04 + float(class_data.get("crit", 0.0)) + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)) + float(set_bonus["crit"]))
 	var is_critical := randf() < critical_chance
 	if is_critical:
 		damage = int(round(float(damage) * 1.75))
@@ -637,8 +647,9 @@ func _try_skill() -> void:
 			var talent_bonus := _current_talent_bonus()
 			var passive := _current_passive_data()
 			var passive_skill_multiplier := clampf(float(passive.get("skill", 1.0)), 0.90, 1.18)
-			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0)) * passive_skill_multiplier * float(talent_bonus["skill"])))
-			var critical_chance := minf(0.30, 0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5 + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)))
+			var set_bonus := _current_equipment_set_bonus()
+			var damage := int(round(float(35 + weapon_tier * 5 + weapon_enchant * 3) * float(class_data.get("skill", 1.0)) * float(spec_data.get("skill", 1.0)) * passive_skill_multiplier * float(talent_bonus["skill"]) * float(set_bonus["damage"])))
+			var critical_chance := minf(0.30, 0.05 + float(weapon_enchant) * 0.03 + float(class_data.get("crit", 0.0)) * 0.5 + float(spec_data.get("crit", 0.0)) + float(talent_bonus["crit"]) + float(passive.get("crit", 0.0)) + float(set_bonus["crit"]))
 			if spec_name == "Executioner" and float(mob["hp"]) / maxf(1.0, float(mob["max_hp"])) <= 0.35:
 				damage = int(round(float(damage) * 1.35))
 				_add_floating_message("EXECUTE!", Vector2(mob["pos"]) + Vector2(0, -66), Color("#ff8b78"))
@@ -688,7 +699,8 @@ func _try_ultimate() -> void:
 	var talent_bonus := _current_talent_bonus()
 	var power := float(ultimate["power"]) * clampf(float(passive.get("ultimate", 1.0)), 0.90, 1.12)
 	var passive_skill_multiplier := clampf(float(passive.get("skill", 1.0)), 0.90, 1.18)
-	var base_damage := float(70 + weapon_tier * 10 + weapon_enchant * 5)
+	var set_bonus := _current_equipment_set_bonus()
+	var base_damage := float(70 + weapon_tier * 10 + weapon_enchant * 5) * float(set_bonus["damage"])
 	combat_effects.append({"kind": "ultimate", "pos": player_position, "life": 0.72, "duration": 0.72})
 	_add_floating_message(String(ultimate["name"]) + "!", player_position + Vector2(0, -76), Color("#ffd28b"))
 	_show_passive_proc("PASSIVE ULTIMATE: %s" % String(passive.get("name", "ASCENDANT")), player_position, Color("#b8e8a0"))
@@ -743,7 +755,8 @@ func _defeat_mob(mob: Dictionary) -> void:
 	if not is_boss:
 		_ensure_guardian_encounter()
 	var passive := _current_passive_data()
-	var class_kill_heal := int(_current_class_data().get("kill_heal", 0)) + int(_current_specialization_data().get("heal", 0)) + int(_current_talent_bonus()["heal"]) + int(passive.get("heal", 0))
+	var set_bonus := _current_equipment_set_bonus()
+	var class_kill_heal := int(_current_class_data().get("kill_heal", 0)) + int(_current_specialization_data().get("heal", 0)) + int(_current_talent_bonus()["heal"]) + int(passive.get("heal", 0)) + int(set_bonus["heal"])
 	if class_kill_heal > 0:
 		player_hp = mini(player_max_hp, player_hp + class_kill_heal)
 		_add_floating_message("CLASS HEAL +%d" % class_kill_heal, player_position + Vector2(0, -46), Color("#a8e6a0"))
@@ -988,6 +1001,7 @@ func _xp_for_next_level() -> int:
 
 func _save_progress() -> void:
 	var data := {
+		"save_version": 2,
 		"level": player_level,
 		"talent_points": talent_points,
 		"talent_ranks": talent_ranks,
@@ -1011,18 +1025,57 @@ func _save_progress() -> void:
 		"player_hp": player_hp,
 		"player_max_hp": player_max_hp
 	}
-	var file := FileAccess.open(save_path, FileAccess.WRITE)
-	if file != null:
-		file.store_string(JSON.stringify(data))
+	var temp_path := save_path + ".tmp"
+	var backup_path := save_path + ".bak"
+	var file := FileAccess.open(temp_path, FileAccess.WRITE)
+	if file == null:
+		_add_floating_message("SAVE FAILED: CANNOT WRITE", player_position + Vector2(0, -58), Color("#ff9877"))
+		return
+	file.store_string(JSON.stringify(data))
+	file.close()
+	var verify_file := FileAccess.open(temp_path, FileAccess.READ)
+	if verify_file == null or typeof(JSON.parse_string(verify_file.get_as_text())) != TYPE_DICTIONARY:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(temp_path))
+		_add_floating_message("SAVE FAILED: VERIFY ERROR", player_position + Vector2(0, -58), Color("#ff9877"))
+		return
+	verify_file.close()
+	var save_absolute := ProjectSettings.globalize_path(save_path)
+	var temp_absolute := ProjectSettings.globalize_path(temp_path)
+	var backup_absolute := ProjectSettings.globalize_path(backup_path)
+	if FileAccess.file_exists(save_path):
+		if FileAccess.file_exists(backup_path):
+			DirAccess.remove_absolute(backup_absolute)
+		var backup_error := DirAccess.copy_absolute(save_absolute, backup_absolute)
+		if backup_error != OK:
+			DirAccess.remove_absolute(temp_absolute)
+			_add_floating_message("SAVE FAILED: BACKUP ERROR", player_position + Vector2(0, -58), Color("#ff9877"))
+			return
+		DirAccess.remove_absolute(save_absolute)
+	var rename_error := DirAccess.rename_absolute(temp_absolute, save_absolute)
+	if rename_error != OK:
+		if FileAccess.file_exists(backup_path):
+			DirAccess.copy_absolute(backup_absolute, save_absolute)
+		_add_floating_message("SAVE FAILED: RESTORE BACKUP", player_position + Vector2(0, -58), Color("#ff9877"))
+
+func _read_save_data(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed = JSON.parse_string(file.get_as_text())
+	file.close()
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return {}
+	return parsed
 
 func _load_progress() -> void:
-	if not FileAccess.file_exists(save_path):
-		return
-	var file := FileAccess.open(save_path, FileAccess.READ)
-	if file == null:
-		return
-	var parsed = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY:
+	var parsed := _read_save_data(save_path)
+	if parsed.is_empty():
+		parsed = _read_save_data(save_path + ".bak")
+		if not parsed.is_empty():
+			_add_floating_message("SAVE RESTORED FROM BACKUP", player_position + Vector2(0, -58), Color("#b8e8a0"))
+	if parsed.is_empty():
 		return
 	player_level = maxi(1, int(parsed.get("level", 1)))
 	talent_points = maxi(0, int(parsed.get("talent_points", 0)))
@@ -1405,6 +1458,9 @@ func _draw_hud() -> void:
 		draw_string(ThemeDB.fallback_font, talent_center + Vector2(-58, -2), "%s %d/5" % [talent_titles[branch], talent_ranks[branch]], HORIZONTAL_ALIGNMENT_LEFT, 120, 11, Color("#e7dfc8"))
 		draw_string(ThemeDB.fallback_font, talent_center + Vector2(-58, 14), "KEY %d" % (branch + 1), HORIZONTAL_ALIGNMENT_LEFT, 120, 9, Color("#d7c59f"))
 	draw_string(ThemeDB.fallback_font, Vector2(640, 432), "TALENT POINTS: %d" % talent_points, HORIZONTAL_ALIGNMENT_CENTER, 280, 13, Color("#b8e8a0") if talent_points > 0 else Color("#c5cfba"))
+	var set_bonus := _current_equipment_set_bonus()
+	var set_color := Color("#ffd28b") if weapon_enchant >= 4 and armor_enchant >= 4 else (Color("#b8e8a0") if weapon_enchant >= 2 and armor_enchant >= 2 else Color("#c5cfba"))
+	draw_string(ThemeDB.fallback_font, Vector2(640, 454), "SET: %s  •  DMG +%d%%  •  ARMOR +%d  •  CRIT +%d%%" % [String(set_bonus["name"]), int(round((float(set_bonus["damage"]) - 1.0) * 100.0)), int(set_bonus["armor"]), int(round(float(set_bonus["crit"]) * 100.0))], HORIZONTAL_ALIGNMENT_CENTER, 560, 11, set_color)
 	var forge_weapon_center := _forge_weapon_button_center()
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color("#c49a62"), false, 2.0)
