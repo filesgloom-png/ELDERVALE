@@ -30,6 +30,7 @@ var armor_enchant := 0
 var quest_reward_claimed := false
 var second_quest_reward_claimed := false
 var mobs: Array[Dictionary] = []
+var loot_drops: Array[Dictionary] = []
 var save_path := "user://eldervale_save.json"
 
 func _ready() -> void:
@@ -45,6 +46,7 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("ui_accept"):
 		_try_attack()
 	_update_mobs(delta)
+	_update_loot_drops(delta)
 	var keyboard_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
@@ -204,9 +206,10 @@ func _defeat_mob(mob: Dictionary) -> void:
 	mob["alive"] = false
 	mob["respawn_timer"] = 8.0
 	kills += 1
-	player_coins += 3 + player_level
-	herbs += 1 + int(kills % 2)
-	relic_shards += 1 if int(mob["xp"]) >= 28 else 0
+	_spawn_loot_drop(mob["pos"], "coins", 3 + player_level)
+	_spawn_loot_drop(mob["pos"] + Vector2(-15, 8), "herbs", 1 + int(kills % 2))
+	if int(mob["xp"]) >= 28:
+		_spawn_loot_drop(mob["pos"] + Vector2(15, -8), "relic", 1)
 	_gain_xp(int(mob["xp"]))
 	if kills >= 3 and not quest_reward_claimed:
 		quest_reward_claimed = true
@@ -244,6 +247,34 @@ func _mob_spawn_position(index: int) -> Vector2:
 		Vector2(950, 300), Vector2(370, 445)
 	]
 	return spawn_positions[index % spawn_positions.size()]
+
+func _spawn_loot_drop(drop_position: Vector2, drop_type: String, amount: int) -> void:
+	loot_drops.append({
+		"type": drop_type,
+		"amount": amount,
+		"pos": drop_position,
+		"life": 22.0
+	})
+
+func _update_loot_drops(delta: float) -> void:
+	for i in range(loot_drops.size() - 1, -1, -1):
+		var drop: Dictionary = loot_drops[i]
+		drop["life"] = float(drop["life"]) - delta
+		if player_position.distance_to(drop["pos"]) <= 42.0:
+			var amount := int(drop["amount"])
+			match String(drop["type"]):
+				"coins":
+					player_coins += amount
+				"herbs":
+					herbs += amount
+				"relic":
+					relic_shards += amount
+			loot_drops.remove_at(i)
+			_save_progress()
+		elif float(drop["life"]) <= 0.0:
+			loot_drops.remove_at(i)
+		else:
+			loot_drops[i] = drop
 
 func _craft_weapon_enchant() -> void:
 	if weapon_enchant >= 3 or relic_shards < 3 or herbs < 5:
@@ -349,6 +380,7 @@ func _draw() -> void:
 	_draw_ruins()
 	_draw_trees()
 	_draw_mobs()
+	_draw_loot_drops()
 	_draw_player()
 	_draw_hud()
 
@@ -444,6 +476,17 @@ func _draw_mobs() -> void:
 		draw_rect(Rect2(mob_pos + Vector2(-bar_width / 2.0, -24), Vector2(bar_width, 4)), Color("#241e1d"))
 		draw_rect(Rect2(mob_pos + Vector2(-bar_width / 2.0, -24), Vector2(bar_width * clampf(float(mob["hp"]) / float(mob["max_hp"]), 0.0, 1.0), 4)), Color("#b94d45"))
 		draw_string(ThemeDB.fallback_font, mob_pos + Vector2(-27, -30), String(mob["name"]), HORIZONTAL_ALIGNMENT_LEFT, 70, 9, Color("#ded2bd"))
+
+func _draw_loot_drops() -> void:
+	for drop in loot_drops:
+		var p: Vector2 = drop["pos"]
+		var drop_type := String(drop["type"])
+		var color := Color("#e0bd68") if drop_type == "coins" else (Color("#8fbd75") if drop_type == "herbs" else Color("#b58be0"))
+		draw_circle(p + Vector2(0, 5), 9.0, Color(0.02, 0.025, 0.02, 0.32))
+		draw_circle(p, 7.0, color)
+		draw_arc(p, 7.0, 0.0, TAU, 20, color.lightened(0.45), 2.0)
+		var glyph := "G" if drop_type == "coins" else ("H" if drop_type == "herbs" else "R")
+		draw_string(ThemeDB.fallback_font, p + Vector2(-3, 3), glyph, HORIZONTAL_ALIGNMENT_LEFT, 8, 8, Color("#22231d"))
 
 func _draw_player() -> void:
 	draw_circle(player_position + Vector2(2, 15), 18.0, Color(0.02, 0.03, 0.025, 0.28))
