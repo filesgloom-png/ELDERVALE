@@ -179,7 +179,6 @@ func _current_class_data() -> Dictionary:
 
 func _current_specialization_data() -> Dictionary:
 	var class_data := _current_class_data()
-	var class_name := String(class_data["name"])
 	var spec_name := String((class_data["specs"] as Array)[specialization_index])
 	var data := {"damage": 1.0, "crit": 0.0, "armor": 0, "skill": 1.0, "range": 0.0, "heal": 0, "dodge_cd": 0.0, "cooldown": 0.0}
 	match spec_name:
