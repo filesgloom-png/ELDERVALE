@@ -22,6 +22,9 @@ var skill_cooldown := 0.0
 var mob_attack_cooldown := 0.0
 var weapon_tier := 0
 var armor_tier := 0
+var herbs := 0
+var potions := 0
+var relic_shards := 0
 var quest_reward_claimed := false
 var second_quest_reward_claimed := false
 var mobs: Array[Dictionary] = []
@@ -56,6 +59,10 @@ func _input(event: InputEvent) -> void:
 			_buy_armor()
 		elif event.keycode == KEY_F:
 			_try_skill()
+		elif event.keycode == KEY_C:
+			_craft_potion()
+		elif event.keycode == KEY_R:
+			_use_potion()
 	if event is InputEventScreenTouch:
 		if event.pressed and event.position.x < WORLD_SIZE.x * 0.48 and event.position.y > WORLD_SIZE.y * 0.48:
 			joystick_active = true
@@ -79,6 +86,11 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 		_buy_weapon()
 	elif screen_position.distance_to(_armor_button_center()) <= 62.0:
 		_buy_armor()
+	elif screen_position.distance_to(_potion_button_center()) <= 58.0:
+		if potions > 0:
+			_use_potion()
+		else:
+			_craft_potion()
 
 func _attack_button_center() -> Vector2:
 	return Vector2(WORLD_SIZE.x - 100.0, WORLD_SIZE.y - 110.0)
@@ -91,6 +103,9 @@ func _weapon_button_center() -> Vector2:
 
 func _armor_button_center() -> Vector2:
 	return Vector2(WORLD_SIZE.x - 350.0, WORLD_SIZE.y - 92.0)
+
+func _potion_button_center() -> Vector2:
+	return Vector2(650.0, WORLD_SIZE.y - 92.0)
 
 func _spawn_initial_mobs() -> void:
 	mobs = [
@@ -174,6 +189,8 @@ func _defeat_mob(mob: Dictionary) -> void:
 	mob["respawn_timer"] = 8.0
 	kills += 1
 	player_coins += 3 + player_level
+	herbs += 1 + int(kills % 2)
+	relic_shards += 1 if int(mob["xp"]) >= 28 else 0
 	_gain_xp(int(mob["xp"]))
 	if kills >= 3 and not quest_reward_claimed:
 		quest_reward_claimed = true
@@ -212,6 +229,22 @@ func _mob_spawn_position(index: int) -> Vector2:
 	]
 	return spawn_positions[index % spawn_positions.size()]
 
+func _craft_potion() -> void:
+	if herbs < 3:
+		return
+	herbs -= 3
+	potions += 1
+	_save_progress()
+	queue_redraw()
+
+func _use_potion() -> void:
+	if potions <= 0 or player_hp >= player_max_hp:
+		return
+	potions -= 1
+	player_hp = mini(player_max_hp, player_hp + 45)
+	_save_progress()
+	queue_redraw()
+
 func _gain_xp(amount: int) -> void:
 	player_xp += amount
 	_process_level_ups()
@@ -236,6 +269,9 @@ func _save_progress() -> void:
 		"second_quest_reward_claimed": second_quest_reward_claimed,
 		"weapon_tier": weapon_tier,
 		"armor_tier": armor_tier,
+		"herbs": herbs,
+		"potions": potions,
+		"relic_shards": relic_shards,
 		"player_hp": player_hp,
 		"player_max_hp": player_max_hp
 	}
@@ -260,6 +296,9 @@ func _load_progress() -> void:
 	second_quest_reward_claimed = bool(parsed.get("second_quest_reward_claimed", false))
 	weapon_tier = clampi(int(parsed.get("weapon_tier", 0)), 0, 5)
 	armor_tier = clampi(int(parsed.get("armor_tier", 0)), 0, 5)
+	herbs = maxi(0, int(parsed.get("herbs", 0)))
+	potions = maxi(0, int(parsed.get("potions", 0)))
+	relic_shards = maxi(0, int(parsed.get("relic_shards", 0)))
 	player_max_hp = maxi(100, int(parsed.get("player_max_hp", 100)))
 	player_hp = clampi(int(parsed.get("player_hp", player_max_hp)), 1, player_max_hp)
 
@@ -419,3 +458,9 @@ func _draw_hud() -> void:
 	draw_arc(attack_center, 52.0, 0.0, TAU, 48, Color("#d8a66d"), 3.0)
 	draw_string(ThemeDB.fallback_font, attack_center + Vector2(-28, 5), "ATTACK", HORIZONTAL_ALIGNMENT_LEFT, 80, 15, Color("#f0dfc4"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 144), "ARMOR reduces damage • SKILL cooldown %.1fs" % skill_cooldown, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#c5cfba"))
+	draw_string(ThemeDB.fallback_font, Vector2(42, 164), "HERBS %d   POTIONS %d   RELIC SHARDS %d" % [herbs, potions, relic_shards], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
+	var potion_center := _potion_button_center()
+	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color(0.13, 0.18, 0.12, 0.9))
+	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
+	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, -2), "POTION C/R", HORIZONTAL_ALIGNMENT_LEFT, 105, 12, Color("#e7dfc8"))
+	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, 15), "x%d / 3 herbs" % potions, HORIZONTAL_ALIGNMENT_LEFT, 105, 11, Color("#d7c59f"))
