@@ -533,6 +533,11 @@ func _draw_mobs() -> void:
 		if float(mob.get("hit_flash", 0.0)) > 0.0:
 			body_color = Color("#fff0d4")
 		draw_circle(mob_pos + Vector2(1, 10), 15.0, Color(0.02, 0.025, 0.02, 0.35))
+		var threat_distance := player_position.distance_to(mob_pos)
+		if threat_distance <= 76.0:
+			var warning_color := Color("#e36b5d")
+			warning_color.a = 0.48 + 0.28 * sin(elapsed * 10.0)
+			draw_arc(mob_pos + Vector2(0, 3), 20.0 + 2.0 * sin(elapsed * 8.0), 0.0, TAU, 28, warning_color, 2.5, true)
 		draw_circle(mob_pos, 13.0, body_color)
 		draw_circle(mob_pos + Vector2(-4, -5), 4.0, body_color.lightened(0.22))
 		draw_circle(mob_pos + Vector2(-4, -2), 2.0, Color("#e3b36b"))
