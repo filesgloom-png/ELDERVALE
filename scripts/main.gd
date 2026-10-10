@@ -25,6 +25,8 @@ var armor_tier := 0
 var herbs := 0
 var potions := 0
 var relic_shards := 0
+var weapon_enchant := 0
+var armor_enchant := 0
 var quest_reward_claimed := false
 var second_quest_reward_claimed := false
 var mobs: Array[Dictionary] = []
@@ -63,6 +65,10 @@ func _input(event: InputEvent) -> void:
 			_craft_potion()
 		elif event.keycode == KEY_R:
 			_use_potion()
+		elif event.keycode == KEY_Z:
+			_craft_weapon_enchant()
+		elif event.keycode == KEY_X:
+			_craft_armor_enchant()
 	if event is InputEventScreenTouch:
 		if event.pressed and event.position.x < WORLD_SIZE.x * 0.48 and event.position.y > WORLD_SIZE.y * 0.48:
 			joystick_active = true
@@ -91,6 +97,10 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 			_use_potion()
 		else:
 			_craft_potion()
+	elif screen_position.distance_to(_forge_weapon_button_center()) <= 55.0:
+		_craft_weapon_enchant()
+	elif screen_position.distance_to(_forge_armor_button_center()) <= 55.0:
+		_craft_armor_enchant()
 
 func _attack_button_center() -> Vector2:
 	return Vector2(WORLD_SIZE.x - 100.0, WORLD_SIZE.y - 110.0)
@@ -106,6 +116,12 @@ func _armor_button_center() -> Vector2:
 
 func _potion_button_center() -> Vector2:
 	return Vector2(650.0, WORLD_SIZE.y - 92.0)
+
+func _forge_weapon_button_center() -> Vector2:
+	return Vector2(135.0, 220.0)
+
+func _forge_armor_button_center() -> Vector2:
+	return Vector2(295.0, 220.0)
 
 func _spawn_initial_mobs() -> void:
 	mobs = [
@@ -135,7 +151,7 @@ func _update_mobs(delta: float) -> void:
 			mob_pos += to_player.normalized() * float(mob["speed"]) * delta
 			mob["pos"] = mob_pos
 		elif to_player.length() <= 34.0 and mob_attack_cooldown <= 0.0:
-			player_hp -= maxi(1, int(mob["damage"]) - armor_tier * 2)
+			player_hp -= maxi(1, int(mob["damage"]) - armor_tier * 2 - armor_enchant * 2)
 			mob_attack_cooldown = 1.0
 			if player_hp <= 0:
 				player_hp = player_max_hp
@@ -159,7 +175,7 @@ func _try_attack() -> void:
 	if target_index == -1:
 		return
 	var target: Dictionary = mobs[target_index]
-	target["hp"] = int(target["hp"]) - (20 + weapon_tier * 8)
+	target["hp"] = int(target["hp"]) - (20 + weapon_tier * 8 + weapon_enchant * 4)
 	if int(target["hp"]) <= 0:
 		_defeat_mob(target)
 	_save_progress()
@@ -174,7 +190,7 @@ func _try_skill() -> void:
 		if not mob["alive"]:
 			continue
 		if player_position.distance_to(mob["pos"]) <= 150.0:
-			mob["hp"] = int(mob["hp"]) - (35 + weapon_tier * 5)
+			mob["hp"] = int(mob["hp"]) - (35 + weapon_tier * 5 + weapon_enchant * 3)
 			hit_any = true
 			if int(mob["hp"]) <= 0:
 				_defeat_mob(mob)
@@ -229,6 +245,24 @@ func _mob_spawn_position(index: int) -> Vector2:
 	]
 	return spawn_positions[index % spawn_positions.size()]
 
+func _craft_weapon_enchant() -> void:
+	if weapon_enchant >= 3 or relic_shards < 3 or herbs < 5:
+		return
+	relic_shards -= 3
+	herbs -= 5
+	weapon_enchant += 1
+	_save_progress()
+	queue_redraw()
+
+func _craft_armor_enchant() -> void:
+	if armor_enchant >= 3 or relic_shards < 2 or herbs < 5:
+		return
+	relic_shards -= 2
+	herbs -= 5
+	armor_enchant += 1
+	_save_progress()
+	queue_redraw()
+
 func _craft_potion() -> void:
 	if herbs < 3:
 		return
@@ -272,6 +306,8 @@ func _save_progress() -> void:
 		"herbs": herbs,
 		"potions": potions,
 		"relic_shards": relic_shards,
+		"weapon_enchant": weapon_enchant,
+		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
 		"player_max_hp": player_max_hp
 	}
@@ -299,6 +335,8 @@ func _load_progress() -> void:
 	herbs = maxi(0, int(parsed.get("herbs", 0)))
 	potions = maxi(0, int(parsed.get("potions", 0)))
 	relic_shards = maxi(0, int(parsed.get("relic_shards", 0)))
+	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 3)
+	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 3)
 	player_max_hp = maxi(100, int(parsed.get("player_max_hp", 100)))
 	player_hp = clampi(int(parsed.get("player_hp", player_max_hp)), 1, player_max_hp)
 
@@ -459,6 +497,16 @@ func _draw_hud() -> void:
 	draw_string(ThemeDB.fallback_font, attack_center + Vector2(-28, 5), "ATTACK", HORIZONTAL_ALIGNMENT_LEFT, 80, 15, Color("#f0dfc4"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 144), "ARMOR reduces damage • SKILL cooldown %.1fs" % skill_cooldown, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 164), "HERBS %d   POTIONS %d   RELIC SHARDS %d" % [herbs, potions, relic_shards], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
+	var forge_weapon_center := _forge_weapon_button_center()
+	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
+	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color("#c49a62"), false, 2.0)
+	draw_string(ThemeDB.fallback_font, forge_weapon_center + Vector2(-59, -2), "FORGE WPN Z", HORIZONTAL_ALIGNMENT_LEFT, 120, 11, Color("#f0dfc4"))
+	draw_string(ThemeDB.fallback_font, forge_weapon_center + Vector2(-59, 14), "+%d  3 shards/5 herbs" % weapon_enchant, HORIZONTAL_ALIGNMENT_LEFT, 125, 9, Color("#d7c59f"))
+	var forge_armor_center := _forge_armor_button_center()
+	draw_rect(Rect2(forge_armor_center - Vector2(67, 23), Vector2(134, 46)), Color(0.12, 0.15, 0.19, 0.92))
+	draw_rect(Rect2(forge_armor_center - Vector2(67, 23), Vector2(134, 46)), Color("#8eb6c5"), false, 2.0)
+	draw_string(ThemeDB.fallback_font, forge_armor_center + Vector2(-59, -2), "FORGE ARM X", HORIZONTAL_ALIGNMENT_LEFT, 120, 11, Color("#d7e8ed"))
+	draw_string(ThemeDB.fallback_font, forge_armor_center + Vector2(-59, 14), "+%d  2 shards/5 herbs" % armor_enchant, HORIZONTAL_ALIGNMENT_LEFT, 125, 9, Color("#c5d8df"))
 	var potion_center := _potion_button_center()
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color(0.13, 0.18, 0.12, 0.9))
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
