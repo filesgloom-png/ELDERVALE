@@ -33,6 +33,7 @@ var second_quest_reward_claimed := false
 var mobs: Array[Dictionary] = []
 var loot_drops: Array[Dictionary] = []
 var floating_messages: Array[Dictionary] = []
+var combat_effects: Array[Dictionary] = []
 var hit_flash_timers: Dictionary = {}
 var save_path := "user://eldervale_save.json"
 
@@ -52,6 +53,7 @@ func _process(delta: float) -> void:
 	_update_mobs(delta)
 	_update_loot_drops(delta)
 	_update_floating_messages(delta)
+	_update_combat_effects(delta)
 	var keyboard_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
@@ -190,6 +192,8 @@ func _try_attack() -> void:
 	if target_index == -1:
 		return
 	var target: Dictionary = mobs[target_index]
+	var slash_direction := (Vector2(target["pos"]) - player_position).normalized()
+	combat_effects.append({"kind": "slash", "pos": player_position, "dir": slash_direction, "life": 0.20, "duration": 0.20})
 	var damage := 20 + weapon_tier * 8 + weapon_enchant * 4
 	target["hp"] = int(target["hp"]) - damage
 	target["hit_flash"] = 0.18
@@ -203,6 +207,7 @@ func _try_skill() -> void:
 	if skill_cooldown > 0.0:
 		return
 	skill_cooldown = 5.0
+	combat_effects.append({"kind": "pulse", "pos": player_position, "life": 0.34, "duration": 0.34})
 	var hit_any := false
 	for mob in mobs:
 		if not mob["alive"]:
@@ -303,6 +308,15 @@ func _update_loot_drops(delta: float) -> void:
 			loot_drops.remove_at(i)
 		else:
 			loot_drops[i] = drop
+
+func _update_combat_effects(delta: float) -> void:
+	for i in range(combat_effects.size() - 1, -1, -1):
+		var effect: Dictionary = combat_effects[i]
+		effect["life"] = float(effect["life"]) - delta
+		if float(effect["life"]) <= 0.0:
+			combat_effects.remove_at(i)
+		else:
+			combat_effects[i] = effect
 
 func _add_floating_message(message: String, message_position: Vector2, message_color: Color) -> void:
 	floating_messages.append({
@@ -429,6 +443,7 @@ func _draw() -> void:
 	_draw_mobs()
 	_draw_loot_drops()
 	_draw_player()
+	_draw_combat_effects()
 	_draw_floating_messages()
 	_draw_hud()
 
@@ -538,6 +553,22 @@ func _draw_loot_drops() -> void:
 		draw_arc(p, 8.0 * pulse, 0.0, TAU, 20, color.lightened(0.45), 2.0)
 		var glyph := "G" if drop_type == "coins" else ("H" if drop_type == "herbs" else "R")
 		draw_string(ThemeDB.fallback_font, p + Vector2(-3, 3), glyph, HORIZONTAL_ALIGNMENT_LEFT, 8, 8, Color("#22231d"))
+
+func _draw_combat_effects() -> void:
+	for effect in combat_effects:
+		var life := float(effect["life"])
+		var duration := maxf(float(effect["duration"]), 0.001)
+		var progress := clampf(1.0 - life / duration, 0.0, 1.0)
+		if String(effect["kind"]) == "slash":
+			var direction: Vector2 = effect["dir"]
+			var center: Vector2 = effect["pos"] + direction * 18.0
+			var slash_color := Color("#f5dfad")
+			slash_color.a = (1.0 - progress) * 0.92
+			draw_arc(center, 30.0 + progress * 8.0, direction.angle() - 0.95, direction.angle() + 0.95, 20, slash_color, 4.0, true)
+		else:
+			var pulse_color := Color("#9fd9e8")
+			pulse_color.a = (1.0 - progress) * 0.72
+			draw_arc(effect["pos"], 24.0 + progress * 126.0, 0.0, TAU, 48, pulse_color, 4.0 - progress * 2.0, true)
 
 func _draw_floating_messages() -> void:
 	for message in floating_messages:
