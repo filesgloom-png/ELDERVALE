@@ -442,20 +442,64 @@ func _update_floating_messages(delta: float) -> void:
 			floating_messages[i] = message
 
 func _craft_weapon_enchant() -> void:
-	if weapon_enchant >= 3 or relic_shards < 3 or herbs < 5:
+	if weapon_enchant >= 4:
+		_add_floating_message("WEAPON ENCHANT MAXED", player_position + Vector2(0, -54), Color("#e7bd9a"))
 		return
-	relic_shards -= 3
-	herbs -= 5
-	weapon_enchant += 1
+	if weapon_enchant == 3:
+		if guardian_cores < 1 or ancient_caches < 1:
+			_add_floating_message("NEED GUARDIAN CORE + ANCIENT CACHE", player_position + Vector2(0, -54), Color("#ff9877"))
+			queue_redraw()
+			return
+		if relic_shards < 5 or herbs < 8:
+			_add_floating_message("LEGENDARY FORGE: 5 SHARDS + 8 HERBS", player_position + Vector2(0, -54), Color("#e7d49a"))
+			queue_redraw()
+			return
+		guardian_cores -= 1
+		ancient_caches -= 1
+		relic_shards -= 5
+		herbs -= 8
+		weapon_enchant += 1
+		_add_floating_message("LEGENDARY WEAPON FORGED!", player_position + Vector2(0, -70), Color("#ffd28b"))
+	else:
+		if relic_shards < 3 or herbs < 5:
+			_add_floating_message("FORGE NEEDS 3 SHARDS + 5 HERBS", player_position + Vector2(0, -54), Color("#c6a0ef"))
+			queue_redraw()
+			return
+		relic_shards -= 3
+		herbs -= 5
+		weapon_enchant += 1
+		_add_floating_message("WEAPON ENCHANT +%d" % weapon_enchant, player_position + Vector2(0, -54), Color("#d7c59f"))
 	_save_progress()
 	queue_redraw()
 
 func _craft_armor_enchant() -> void:
-	if armor_enchant >= 3 or relic_shards < 2 or herbs < 5:
+	if armor_enchant >= 4:
+		_add_floating_message("ARMOR ENCHANT MAXED", player_position + Vector2(0, -54), Color("#e7bd9a"))
 		return
-	relic_shards -= 2
-	herbs -= 5
-	armor_enchant += 1
+	if armor_enchant == 3:
+		if guardian_cores < 1 or ancient_caches < 1:
+			_add_floating_message("NEED GUARDIAN CORE + ANCIENT CACHE", player_position + Vector2(0, -54), Color("#ff9877"))
+			queue_redraw()
+			return
+		if relic_shards < 4 or herbs < 8:
+			_add_floating_message("LEGENDARY FORGE: 4 SHARDS + 8 HERBS", player_position + Vector2(0, -54), Color("#e7d49a"))
+			queue_redraw()
+			return
+		guardian_cores -= 1
+		ancient_caches -= 1
+		relic_shards -= 4
+		herbs -= 8
+		armor_enchant += 1
+		_add_floating_message("LEGENDARY ARMOR FORGED!", player_position + Vector2(0, -70), Color("#bfe4f0"))
+	else:
+		if relic_shards < 2 or herbs < 5:
+			_add_floating_message("FORGE NEEDS 2 SHARDS + 5 HERBS", player_position + Vector2(0, -54), Color("#c6a0ef"))
+			queue_redraw()
+			return
+		relic_shards -= 2
+		herbs -= 5
+		armor_enchant += 1
+		_add_floating_message("ARMOR ENCHANT +%d" % armor_enchant, player_position + Vector2(0, -54), Color("#c5d8df"))
 	_save_progress()
 	queue_redraw()
 
@@ -538,8 +582,8 @@ func _load_progress() -> void:
 	relic_shards = maxi(0, int(parsed.get("relic_shards", 0)))
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
-	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 3)
-	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 3)
+	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
+	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
 	player_max_hp = maxi(100, int(parsed.get("player_max_hp", 100)))
 	player_hp = clampi(int(parsed.get("player_hp", player_max_hp)), 1, player_max_hp)
 
@@ -830,12 +874,14 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color("#c49a62"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, forge_weapon_center + Vector2(-59, -2), "FORGE WPN Z", HORIZONTAL_ALIGNMENT_LEFT, 120, 11, Color("#f0dfc4"))
-	draw_string(ThemeDB.fallback_font, forge_weapon_center + Vector2(-59, 14), "+%d  3 shards/5 herbs" % weapon_enchant, HORIZONTAL_ALIGNMENT_LEFT, 125, 9, Color("#d7c59f"))
+	var weapon_forge_cost := "MAX LEVEL" if weapon_enchant >= 4 else ("CORE+CACHE 5S/8H" if weapon_enchant == 3 else "3 shards / 5 herbs")
+	draw_string(ThemeDB.fallback_font, forge_weapon_center + Vector2(-59, 14), "+%d  %s" % [weapon_enchant, weapon_forge_cost], HORIZONTAL_ALIGNMENT_LEFT, 125, 9, Color("#ffd28b") if weapon_enchant == 3 else Color("#d7c59f"))
 	var forge_armor_center := _forge_armor_button_center()
 	draw_rect(Rect2(forge_armor_center - Vector2(67, 23), Vector2(134, 46)), Color(0.12, 0.15, 0.19, 0.92))
 	draw_rect(Rect2(forge_armor_center - Vector2(67, 23), Vector2(134, 46)), Color("#8eb6c5"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, forge_armor_center + Vector2(-59, -2), "FORGE ARM X", HORIZONTAL_ALIGNMENT_LEFT, 120, 11, Color("#d7e8ed"))
-	draw_string(ThemeDB.fallback_font, forge_armor_center + Vector2(-59, 14), "+%d  2 shards/5 herbs" % armor_enchant, HORIZONTAL_ALIGNMENT_LEFT, 125, 9, Color("#c5d8df"))
+	var armor_forge_cost := "MAX LEVEL" if armor_enchant >= 4 else ("CORE+CACHE 4S/8H" if armor_enchant == 3 else "2 shards / 5 herbs")
+	draw_string(ThemeDB.fallback_font, forge_armor_center + Vector2(-59, 14), "+%d  %s" % [armor_enchant, armor_forge_cost], HORIZONTAL_ALIGNMENT_LEFT, 125, 9, Color("#bfe4f0") if armor_enchant == 3 else Color("#c5d8df"))
 	var potion_center := _potion_button_center()
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color(0.13, 0.18, 0.12, 0.9))
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
