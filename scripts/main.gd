@@ -18,6 +18,10 @@ const SHATTERED_BEACON_POSITION := Vector2(475.0, 564.0)
 const SHATTERED_BEACON_RANGE := 92.0
 const NORTHBOUND_SIGNAL_POSITION := Vector2(575.0, 625.0)
 const NORTHBOUND_SIGNAL_RANGE := 72.0
+const WATCHTOWER_PATH_POSITION := Vector2(674.0, 610.0)
+const WATCHTOWER_PATH_RANGE := 78.0
+const FROSTWATCH_RELIC_POSITION := Vector2(842.0, 572.0)
+const FROSTWATCH_RELIC_RANGE := 76.0
 const CODEX_BUTTON_RECT := Rect2(1114.0, 145.0, 146.0, 44.0)
 const RUNE_BUTTON_RECT := Rect2(516.0, 620.0, 248.0, 58.0)
 const CODEX_CLOSE_RECT := Rect2(914.0, 124.0, 82.0, 38.0)
@@ -149,12 +153,17 @@ var nearby_ancient_chest := false
 var nearby_memory_exit := false
 var nearby_shattered_beacon := false
 var nearby_northbound_signal := false
+var nearby_watchtower_path := false
+var nearby_frostwatch_relic := false
 var hidden_passage_open := false
 var ancient_chest_claimed := false
 var shattered_reach_unlocked := false
 var shattered_reach_discovered := false
 var shattered_beacon_activated := false
 var northbound_signal_discovered := false
+var watchtower_path_open := false
+var watchtower_discovered := false
+var frostwatch_relic_discovered := false
 var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
@@ -213,6 +222,8 @@ func _process(delta: float) -> void:
 	nearby_memory_exit = memory_guardian_defeated and player_position.distance_to(MEMORY_EXIT_POSITION) <= MEMORY_EXIT_RANGE
 	nearby_shattered_beacon = shattered_reach_discovered and player_position.distance_to(SHATTERED_BEACON_POSITION) <= SHATTERED_BEACON_RANGE
 	nearby_northbound_signal = shattered_beacon_activated and player_position.distance_to(NORTHBOUND_SIGNAL_POSITION) <= NORTHBOUND_SIGNAL_RANGE
+	nearby_watchtower_path = northbound_signal_discovered and player_position.distance_to(WATCHTOWER_PATH_POSITION) <= WATCHTOWER_PATH_RANGE
+	nearby_frostwatch_relic = watchtower_discovered and not frostwatch_relic_discovered and player_position.distance_to(FROSTWATCH_RELIC_POSITION) <= FROSTWATCH_RELIC_RANGE
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
 	if dodge_time > 0.0:
@@ -287,6 +298,10 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 			_claim_ancient_chest()
 		elif nearby_northbound_signal:
 			_inspect_northbound_signal()
+		elif nearby_frostwatch_relic:
+			_inspect_frostwatch_relic()
+		elif nearby_watchtower_path:
+			_enter_forgotten_watchtower()
 		elif nearby_shattered_beacon:
 			_activate_shattered_beacon()
 		elif nearby_memory_exit:
@@ -1033,6 +1048,34 @@ func _inspect_northbound_signal() -> void:
 	queue_redraw()
 
 
+func _enter_forgotten_watchtower() -> void:
+	if not northbound_signal_discovered:
+		_add_floating_message("THE NORTHERN ROAD IS STILL LOST", player_position + Vector2(0, -62), Color("#d7c59f"))
+		return
+	watchtower_path_open = true
+	watchtower_discovered = true
+	player_position = Vector2(730.0, 590.0)
+	_discover_codex_entry(14)
+	_add_floating_message("THE FORGOTTEN WATCHTOWER", player_position + Vector2(0, -70), Color("#b9dff2"))
+	_add_floating_message("A COLD WIND CARRIES OLD WHISPERS", player_position + Vector2(0, -94), Color("#d7c59f"))
+	_save_progress()
+	queue_redraw()
+
+
+func _inspect_frostwatch_relic() -> void:
+	if not watchtower_discovered or frostwatch_relic_discovered:
+		return
+	frostwatch_relic_discovered = true
+	_discover_codex_entry(15)
+	echo_shards += 1
+	player_xp += 20
+	_process_level_ups()
+	_add_floating_message("FROSTWATCH RELIC RECOVERED", player_position + Vector2(0, -70), Color("#b9dff2"))
+	_add_floating_message("ECHO SHARD +1  •  XP +20", player_position + Vector2(0, -94), Color("#9dffe2"))
+	_save_progress()
+	queue_redraw()
+
+
 func _claim_ancient_chest() -> void:
 	if not hidden_passage_open or ancient_chest_claimed:
 		return
@@ -1369,6 +1412,9 @@ func _save_progress() -> void:
 		"shattered_reach_discovered": shattered_reach_discovered,
 		"shattered_beacon_activated": shattered_beacon_activated,
 		"northbound_signal_discovered": northbound_signal_discovered,
+		"watchtower_path_open": watchtower_path_open,
+		"watchtower_discovered": watchtower_discovered,
+		"frostwatch_relic_discovered": frostwatch_relic_discovered,
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
@@ -1451,7 +1497,7 @@ func _load_progress() -> void:
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
 	echo_shards = clampi(int(parsed.get("echo_shards", 0)), 0, 999999)
-	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 16383)
+	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 65535)
 	rune_studied = bool(parsed.get("rune_studied", false))
 	rune_activated = bool(parsed.get("rune_activated", false))
 	hidden_passage_open = bool(parsed.get("hidden_passage_open", rune_activated and (codex_entries & 448) == 448))
@@ -1462,6 +1508,9 @@ func _load_progress() -> void:
 	shattered_reach_discovered = bool(parsed.get("shattered_reach_discovered", false))
 	shattered_beacon_activated = bool(parsed.get("shattered_beacon_activated", false))
 	northbound_signal_discovered = bool(parsed.get("northbound_signal_discovered", false))
+	watchtower_path_open = bool(parsed.get("watchtower_path_open", false))
+	watchtower_discovered = bool(parsed.get("watchtower_discovered", false))
+	frostwatch_relic_discovered = bool(parsed.get("frostwatch_relic_discovered", false))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
 	player_max_hp = clampi(int(parsed.get("player_max_hp", 100)), 100, 100000)
@@ -1479,6 +1528,7 @@ func _draw() -> void:
 	_draw_ground()
 	_draw_ruins()
 	_draw_shattered_reach()
+	_draw_forgotten_watchtower()
 	_draw_hidden_hall()
 	_draw_ruin_objects()
 	_draw_hidden_gate()
@@ -1633,6 +1683,36 @@ func _draw_shattered_reach() -> void:
 		var signal_points := PackedVector2Array([NORTHBOUND_SIGNAL_POSITION + Vector2(0, -13), NORTHBOUND_SIGNAL_POSITION + Vector2(11, 0), NORTHBOUND_SIGNAL_POSITION + Vector2(0, 13), NORTHBOUND_SIGNAL_POSITION + Vector2(-11, 0)])
 		draw_colored_polygon(signal_points, signal_color)
 		draw_string(ThemeDB.fallback_font, NORTHBOUND_SIGNAL_POSITION + Vector2(-54, 30), "TRACE RECORDED" if northbound_signal_discovered else "NORTHBOUND TRACE", HORIZONTAL_ALIGNMENT_LEFT, 150, 9, signal_color)
+
+
+func _draw_forgotten_watchtower() -> void:
+	if not watchtower_path_open:
+		if northbound_signal_discovered:
+			var path_glow := Color("#b9dff2", 0.10 + 0.05 * sin(elapsed * 1.7))
+			draw_line(NORTHBOUND_SIGNAL_POSITION + Vector2(12, 2), WATCHTOWER_PATH_POSITION + Vector2(-12, 0), Color("#8caab5", 0.55), 5.0)
+			draw_circle(WATCHTOWER_PATH_POSITION, 20.0, path_glow)
+			draw_string(ThemeDB.fallback_font, WATCHTOWER_PATH_POSITION + Vector2(-46, 36), "BROKEN NORTH ROAD", HORIZONTAL_ALIGNMENT_LEFT, 132, 9, Color("#b9dff2"))
+		return
+	var zone_rect := Rect2(620.0, 492.0, 300.0, 158.0)
+	draw_rect(Rect2(zone_rect.position + Vector2(4, 6), zone_rect.size), Color("#111a20"))
+	draw_rect(zone_rect, Color("#293a43"))
+	draw_rect(Rect2(zone_rect.position + Vector2(8, 8), zone_rect.size - Vector2(16, 16)), Color("#202d35"))
+	for shard_index in range(9):
+		var shard_x := zone_rect.position.x + 20.0 + float(shard_index) * 30.0
+		var shard_y := zone_rect.position.y + 36.0 + float((shard_index * 23) % 80)
+		draw_line(Vector2(shard_x, shard_y), Vector2(shard_x + 9.0, shard_y - 16.0), Color("#647f8d"), 2.5)
+	draw_rect(Rect2(710.0, 520.0, 42.0, 65.0), Color("#17242a"))
+	draw_rect(Rect2(704.0, 514.0, 54.0, 10.0), Color("#536b77"))
+	draw_rect(Rect2(718.0, 530.0, 9.0, 22.0), Color("#b9dff2"))
+	draw_rect(Rect2(737.0, 530.0, 9.0, 22.0), Color("#b9dff2"))
+	draw_line(Vector2(730.0, 514.0), Vector2(730.0, 490.0), Color("#839ca7"), 3.0)
+	draw_line(Vector2(730.0, 490.0), Vector2(715.0, 501.0), Color("#839ca7"), 3.0)
+	draw_line(Vector2(730.0, 490.0), Vector2(745.0, 501.0), Color("#839ca7"), 3.0)
+	draw_string(ThemeDB.fallback_font, zone_rect.position + Vector2(18, 22), "THE FORGOTTEN WATCHTOWER", HORIZONTAL_ALIGNMENT_LEFT, 260, 12, Color("#c6e3f2"))
+	var relic_glow := Color("#b9dff2", 0.15 + 0.08 * sin(elapsed * 2.0)) if not frostwatch_relic_discovered else Color("#83e8e0", 0.08)
+	draw_circle(FROSTWATCH_RELIC_POSITION, 28.0, relic_glow)
+	draw_polygon(PackedVector2Array([FROSTWATCH_RELIC_POSITION + Vector2(0, -15), FROSTWATCH_RELIC_POSITION + Vector2(12, 0), FROSTWATCH_RELIC_POSITION + Vector2(0, 15), FROSTWATCH_RELIC_POSITION + Vector2(-12, 0)]), PackedColorArray([Color("#b9dff2"), Color("#7199b2"), Color("#d6f0ff"), Color("#7199b2")]))
+	draw_string(ThemeDB.fallback_font, FROSTWATCH_RELIC_POSITION + Vector2(-50, 32), "FROSTWATCH RELIC" if not frostwatch_relic_discovered else "RELIC RECOVERED", HORIZONTAL_ALIGNMENT_LEFT, 130, 9, Color("#b9dff2"))
 
 
 func _draw_ancient_chest() -> void:
@@ -2007,13 +2087,17 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, -2), "POTION C/R", HORIZONTAL_ALIGNMENT_LEFT, 105, 12, Color("#e7dfc8"))
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, 15), "x%d / 3 herbs" % potions, HORIZONTAL_ALIGNMENT_LEFT, 105, 11, Color("#d7c59f"))
-	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon or nearby_northbound_signal) and not codex_open:
+	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon or nearby_northbound_signal or nearby_watchtower_path or nearby_frostwatch_relic) and not codex_open:
 		draw_rect(RUNE_BUTTON_RECT, Color(0.035, 0.12, 0.13, 0.96))
 		var interaction_color := Color("#83e8e0") if rune_nearby or nearby_ancient_chest or nearby_memory_exit or nearby_shattered_beacon or nearby_northbound_signal else Color("#d7c59f")
 		draw_rect(RUNE_BUTTON_RECT, interaction_color, false, 2.5)
 		var interaction_label := "RUNE AWAKENED" if rune_activated else ("ACTIVATE RUNE" if rune_studied and (codex_entries & 15) == 15 else "STUDY ANCIENT RUNE")
 		if nearby_northbound_signal and not rune_nearby:
 			interaction_label = "TRACE RECORDED" if northbound_signal_discovered else "FOLLOW NORTHBOUND SIGNAL"
+		elif nearby_frostwatch_relic and not rune_nearby:
+			interaction_label = "RELIC RECOVERED" if frostwatch_relic_discovered else "RECOVER FROSTWATCH RELIC"
+		elif nearby_watchtower_path and not rune_nearby:
+			interaction_label = "ENTER FORGOTTEN WATCHTOWER"
 		elif nearby_shattered_beacon and not rune_nearby:
 			interaction_label = "BEACON AWAKENED" if shattered_beacon_activated else "ACTIVATE BEACON"
 		elif nearby_ancient_chest and not rune_nearby:
@@ -2036,7 +2120,7 @@ func _draw_hud() -> void:
 		draw_rect(CODEX_CLOSE_RECT, Color("#83e8e0"), false, 1.5)
 		draw_string(ThemeDB.fallback_font, CODEX_CLOSE_RECT.position + Vector2(14, 24), "CLOSE", HORIZONTAL_ALIGNMENT_LEFT, 64, 12, Color("#e0f7ee"))
 		draw_string(ThemeDB.fallback_font, Vector2(300, 187), "Collect traces from combat and ancient relics. Four clues reveal a hidden convergence.", HORIZONTAL_ALIGNMENT_LEFT, 680, 12, Color("#a9c9c2"))
-		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian", "The Shattered Reach", "The First Beacon", "The Northbound Signal"]
+		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian", "The Shattered Reach", "The First Beacon", "The Northbound Signal", "The Forgotten Watchtower", "Frostwatch Relic"
 		var codex_hints: Array[String] = [
 			"A fragment remembers something its owner forgot.",
 			"Three echoes briefly become one living force.",
@@ -2051,7 +2135,9 @@ func _draw_hud() -> void:
 			"An ancient will protects the hall. Its relic remembers every battle.",
 			"Beyond the hall, a broken road leads to the Shattered Reach. The first beacon is silent.",
 			"The beacon has awakened. Its light points toward a distant signal beyond the shattered road.",
-			"A faint answering light marks a route to a forgotten watchtower farther north."
+			"A faint answering light marks a route to a forgotten watchtower farther north.",
+			"The broken northern path opens into a wind-scoured watchtower, abandoned but not silent.",
+			"A frostbound relic holds an echo from the watchtower's final keeper."
 		]
 		var codex_found := 0
 		for entry_index in range(codex_titles.size()):
