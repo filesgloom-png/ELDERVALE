@@ -1834,7 +1834,7 @@ func _draw_hud() -> void:
 		if nearby_ancient_chest and not rune_nearby:
 			interaction_label = "CLAIM ANCIENT CACHE"
 		elif nearby_hidden_gate and not rune_nearby:
-			interaction_label = "ENTER HIDDEN PASSAGE"
+			interaction_label = "ENTER HIDDEN PASSAGE" if hidden_passage_open else "STUDY SEALED GATE"
 		elif not rune_nearby and nearby_ruin_object >= 0:
 			var object_labels: Array[String] = ["INSPECT WATCHSTONE", "READ INSCRIPTION", "OPEN MEMORY CACHE"]
 			interaction_label = object_labels[nearby_ruin_object]
@@ -1849,7 +1849,7 @@ func _draw_hud() -> void:
 		draw_rect(CODEX_CLOSE_RECT, Color("#83e8e0"), false, 1.5)
 		draw_string(ThemeDB.fallback_font, CODEX_CLOSE_RECT.position + Vector2(14, 24), "CLOSE", HORIZONTAL_ALIGNMENT_LEFT, 64, 12, Color("#e0f7ee"))
 		draw_string(ThemeDB.fallback_font, Vector2(300, 187), "Collect traces from combat and ancient relics. Four clues reveal a hidden convergence.", HORIZONTAL_ALIGNMENT_LEFT, 680, 12, Color("#a9c9c2"))
-		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory"]
+		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath"]
 		var codex_hints: Array[String] = [
 			"A fragment remembers something its owner forgot.",
 			"Three echoes briefly become one living force.",
