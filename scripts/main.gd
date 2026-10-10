@@ -209,6 +209,7 @@ func _try_attack() -> void:
 	var damage := 20 + weapon_tier * 8 + weapon_enchant * 4
 	target["hp"] = int(target["hp"]) - damage
 	target["hit_flash"] = 0.18
+	combat_effects.append({"kind": "hit", "pos": Vector2(target["pos"]), "life": 0.18, "duration": 0.18})
 	_add_floating_message("-%d" % damage, Vector2(target["pos"]) + Vector2(0, -36), Color("#f2b0a0"))
 	if int(target["hp"]) <= 0:
 		_defeat_mob(target)
@@ -228,6 +229,7 @@ func _try_skill() -> void:
 			var damage := 35 + weapon_tier * 5 + weapon_enchant * 3
 			mob["hp"] = int(mob["hp"]) - damage
 			mob["hit_flash"] = 0.18
+			combat_effects.append({"kind": "hit", "pos": Vector2(mob["pos"]), "life": 0.18, "duration": 0.18})
 			_add_floating_message("-%d" % damage, Vector2(mob["pos"]) + Vector2(0, -36), Color("#a8d8ef"))
 			hit_any = true
 			if int(mob["hp"]) <= 0:
@@ -571,12 +573,6 @@ func _draw_mobs() -> void:
 			var telegraph_color := Color("#ffb45c")
 			telegraph_color.a = 0.75 + 0.25 * sin(elapsed * 18.0)
 			draw_arc(mob_pos + Vector2(0, 3), 26.0, -PI * 0.5, -PI * 0.5 + TAU * windup_progress, 32, telegraph_color, 4.0, true)
-		var attack_windup := float(mob.get("attack_windup", 0.0))
-		if attack_windup > 0.0:
-			var windup_progress := 1.0 - clampf(attack_windup / 0.42, 0.0, 1.0)
-			var telegraph_color := Color("#ffb45c")
-			telegraph_color.a = 0.75 + 0.25 * sin(elapsed * 18.0)
-			draw_arc(mob_pos + Vector2(0, 3), 26.0, -PI * 0.5, -PI * 0.5 + TAU * windup_progress, 32, telegraph_color, 4.0, true)
 		if String(mob["name"]) == "Ruins Stalker":
 			var rune_glow := 0.35 + 0.22 * sin(elapsed * 3.2 + mob_pos.x * 0.02)
 			var rune_color := Color("#ad8bf0")
@@ -614,6 +610,13 @@ func _draw_combat_effects() -> void:
 			var slash_color := Color("#f5dfad")
 			slash_color.a = (1.0 - progress) * 0.92
 			draw_arc(center, 30.0 + progress * 8.0, direction.angle() - 0.95, direction.angle() + 0.95, 20, slash_color, 4.0, true)
+		elif String(effect["kind"]) == "hit":
+			var hit_color := Color("#ffd58b")
+			hit_color.a = (1.0 - progress) * 0.95
+			for ray_index in range(6):
+				var ray_angle := TAU * float(ray_index) / 6.0
+				var ray_direction := Vector2(cos(ray_angle), sin(ray_angle))
+				draw_line(Vector2(effect["pos"]) + ray_direction * 4.0, Vector2(effect["pos"]) + ray_direction * (10.0 + progress * 13.0), hit_color, 2.0)
 		else:
 			var pulse_color := Color("#9fd9e8")
 			pulse_color.a = (1.0 - progress) * 0.72
