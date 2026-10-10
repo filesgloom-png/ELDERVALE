@@ -11,6 +11,9 @@ const HIDDEN_GATE_POSITION := Vector2(1118.0, 282.0)
 const HIDDEN_GATE_RANGE := 96.0
 const ANCIENT_CHEST_POSITION := Vector2(1110.0, 396.0)
 const ANCIENT_CHEST_RANGE := 90.0
+const MEMORY_EXIT_POSITION := Vector2(1182.0, 374.0)
+const MEMORY_EXIT_RANGE := 88.0
+const SHATTERED_REACH_ENTRY_POSITION := Vector2(470.0, 568.0)
 const CODEX_BUTTON_RECT := Rect2(1114.0, 145.0, 146.0, 44.0)
 const RUNE_BUTTON_RECT := Rect2(516.0, 620.0, 248.0, 58.0)
 const CODEX_CLOSE_RECT := Rect2(914.0, 124.0, 82.0, 38.0)
@@ -139,8 +142,11 @@ var rune_nearby := false
 var nearby_ruin_object := -1
 var nearby_hidden_gate := false
 var nearby_ancient_chest := false
+var nearby_memory_exit := false
 var hidden_passage_open := false
 var ancient_chest_claimed := false
+var shattered_reach_unlocked := false
+var shattered_reach_discovered := false
 var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
@@ -196,6 +202,7 @@ func _process(delta: float) -> void:
 			nearby_ruin_object = ruin_index
 	nearby_hidden_gate = (codex_entries & 448) == 448 and player_position.distance_to(HIDDEN_GATE_POSITION) <= HIDDEN_GATE_RANGE
 	nearby_ancient_chest = hidden_passage_open and not ancient_chest_claimed and player_position.distance_to(ANCIENT_CHEST_POSITION) <= ANCIENT_CHEST_RANGE
+	nearby_memory_exit = memory_guardian_defeated and player_position.distance_to(MEMORY_EXIT_POSITION) <= MEMORY_EXIT_RANGE
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
 	if dodge_time > 0.0:
@@ -268,6 +275,8 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 			_interact_with_ancient_rune()
 		elif nearby_ancient_chest:
 			_claim_ancient_chest()
+		elif nearby_memory_exit:
+			_enter_shattered_reach()
 		elif nearby_hidden_gate:
 			_interact_with_hidden_gate()
 		elif nearby_ruin_object >= 0:
@@ -849,6 +858,7 @@ func _defeat_mob(mob: Dictionary) -> void:
 	elif is_memory_boss:
 		memory_guardian_defeated = true
 		memory_relic_owned = true
+		shattered_reach_unlocked = true
 		player_coins += 300
 		relic_shards += 5
 		guardian_cores += 1
@@ -894,7 +904,7 @@ func _toggle_codex() -> void:
 	queue_redraw()
 
 func _discover_codex_entry(entry_id: int) -> void:
-	if entry_id < 0 or entry_id > 10:
+	if entry_id < 0 or entry_id > 11:
 		return
 	var entry_bit := 1 << entry_id
 	if (codex_entries & entry_bit) != 0:
@@ -911,10 +921,11 @@ func _discover_codex_entry(entry_id: int) -> void:
 		"The Pilgrim's Oath",
 		"The Sealed Memory",
 		"The Hall Beneath",
-		"The Memory Guardian"
+		"The Memory Guardian",
+		"The Shattered Reach"
 	]
-	var reward_xp := 400 if entry_id == 10 else (150 if entry_id == 5 else (100 if entry_id == 4 else 20))
-	var reward_coins := 250 if entry_id == 10 else (75 if entry_id == 5 else (50 if entry_id == 4 else 10))
+	var reward_xp := 200 if entry_id == 11 else (400 if entry_id == 10 else (150 if entry_id == 5 else (100 if entry_id == 4 else 20)))
+	var reward_coins := 100 if entry_id == 11 else (250 if entry_id == 10 else (75 if entry_id == 5 else (50 if entry_id == 4 else 10))
 	_gain_xp(reward_xp)
 	player_coins += reward_coins
 	_add_floating_message("CODEX FOUND: %s" % titles[entry_id], player_position + Vector2(0, -68), Color("#83e8e0"))
@@ -963,6 +974,19 @@ func _interact_with_hidden_gate() -> void:
 		queue_redraw()
 		return
 	_add_floating_message("THE GATE NEEDS THE AWAKENED RUNE AND THREE RELIC TRACES", player_position + Vector2(0, -68), Color("#d7c59f"))
+
+func _enter_shattered_reach() -> void:
+	if not memory_guardian_defeated or not shattered_reach_unlocked:
+		_add_floating_message("THE EXIT IS SEALED BY THE MEMORY GUARDIAN", player_position + Vector2(0, -62), Color("#d7c59f"))
+		return
+	player_position = SHATTERED_REACH_ENTRY_POSITION
+	shattered_reach_discovered = true
+	_discover_codex_entry(11)
+	_add_floating_message("THE SHATTERED REACH", player_position + Vector2(0, -70), Color("#83e8e0"))
+	_add_floating_message("THE FIRST BEACON HAS GONE DARK", player_position + Vector2(0, -94), Color("#d7c59f"))
+	_save_progress()
+	queue_redraw()
+
 
 func _claim_ancient_chest() -> void:
 	if not hidden_passage_open or ancient_chest_claimed:
@@ -1296,6 +1320,8 @@ func _save_progress() -> void:
 		"ancient_chest_claimed": ancient_chest_claimed,
 		"memory_guardian_defeated": memory_guardian_defeated,
 		"memory_relic_owned": memory_relic_owned,
+		"shattered_reach_unlocked": shattered_reach_unlocked,
+		"shattered_reach_discovered": shattered_reach_discovered,
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
@@ -1378,13 +1404,15 @@ func _load_progress() -> void:
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
 	echo_shards = clampi(int(parsed.get("echo_shards", 0)), 0, 999999)
-	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 2047)
+	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 4095)
 	rune_studied = bool(parsed.get("rune_studied", false))
 	rune_activated = bool(parsed.get("rune_activated", false))
 	hidden_passage_open = bool(parsed.get("hidden_passage_open", rune_activated and (codex_entries & 448) == 448))
 	ancient_chest_claimed = bool(parsed.get("ancient_chest_claimed", false))
 	memory_guardian_defeated = bool(parsed.get("memory_guardian_defeated", false))
 	memory_relic_owned = bool(parsed.get("memory_relic_owned", memory_guardian_defeated))
+	shattered_reach_unlocked = bool(parsed.get("shattered_reach_unlocked", memory_guardian_defeated))
+	shattered_reach_discovered = bool(parsed.get("shattered_reach_discovered", false))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
 	player_max_hp = clampi(int(parsed.get("player_max_hp", 100)), 100, 100000)
@@ -1401,10 +1429,12 @@ func _update_joystick(screen_position: Vector2) -> void:
 func _draw() -> void:
 	_draw_ground()
 	_draw_ruins()
+	_draw_shattered_reach()
 	_draw_hidden_hall()
 	_draw_ruin_objects()
 	_draw_hidden_gate()
 	_draw_ancient_chest()
+	_draw_memory_exit()
 	_draw_ancient_rune()
 	_draw_trees()
 	_draw_mobs()
@@ -1506,6 +1536,40 @@ func _draw_hidden_gate() -> void:
 		portal_glow.a = 0.12 + 0.07 * sin(elapsed * 2.2)
 		draw_circle(gate_position, 44.0, portal_glow)
 		draw_string(ThemeDB.fallback_font, gate_position + Vector2(-47, -27), "PASSAGE OPEN", HORIZONTAL_ALIGNMENT_LEFT, 100, 10, Color("#bff5e9"))
+
+func _draw_memory_exit() -> void:
+	if not hidden_passage_open or not shattered_reach_unlocked:
+		return
+	var portal_color := Color("#83e8e0")
+	portal_color.a = 0.10 + 0.06 * sin(elapsed * 2.1)
+	draw_circle(MEMORY_EXIT_POSITION, 38.0, portal_color)
+	draw_arc(MEMORY_EXIT_POSITION, 26.0 + sin(elapsed * 2.4) * 2.0, 0.0, TAU, 40, Color("#b6fff2"), 3.0, true)
+	draw_line(MEMORY_EXIT_POSITION + Vector2(0, -17), MEMORY_EXIT_POSITION + Vector2(0, 17), Color("#b6fff2"), 2.0)
+	draw_line(MEMORY_EXIT_POSITION + Vector2(-12, 0), MEMORY_EXIT_POSITION + Vector2(12, 0), Color("#b6fff2"), 2.0)
+	draw_string(ThemeDB.fallback_font, MEMORY_EXIT_POSITION + Vector2(-53, -36), "SHATTERED REACH", HORIZONTAL_ALIGNMENT_LEFT, 110, 9, Color("#bff5e9"))
+
+
+func _draw_shattered_reach() -> void:
+	if not shattered_reach_unlocked:
+		return
+	var zone_rect := Rect2(350.0, 500.0, 250.0, 150.0)
+	draw_rect(Rect2(zone_rect.position + Vector2(4, 6), zone_rect.size), Color("#151c21"))
+	draw_rect(zone_rect, Color("#303c42"))
+	draw_rect(Rect2(zone_rect.position + Vector2(8, 8), zone_rect.size - Vector2(16, 16)), Color("#222e34"))
+	for shard_index in range(7):
+		var shard_x := zone_rect.position.x + 26.0 + float(shard_index) * 30.0
+		var shard_y := zone_rect.position.y + 35.0 + float((shard_index * 19) % 62)
+		draw_line(Vector2(shard_x, shard_y), Vector2(shard_x + 10.0, shard_y - 18.0), Color("#687f85"), 3.0)
+		draw_line(Vector2(shard_x + 10.0, shard_y - 18.0), Vector2(shard_x + 21.0, shard_y + 3.0), Color("#52676f"), 2.0)
+	var beacon_position := zone_rect.position + Vector2(125.0, 64.0)
+	var beacon_glow := Color("#83e8e0")
+	beacon_glow.a = 0.05 + 0.04 * sin(elapsed * 1.4)
+	draw_circle(beacon_position, 42.0, beacon_glow)
+	draw_rect(Rect2(beacon_position + Vector2(-9, -24), Vector2(18, 48)), Color("#4a5c60"))
+	draw_arc(beacon_position, 27.0, 0.0, TAU, 32, Color("#718c8e"), 2.0, true)
+	draw_string(ThemeDB.fallback_font, zone_rect.position + Vector2(22, 22), "THE SHATTERED REACH", HORIZONTAL_ALIGNMENT_LEFT, 208, 12, Color("#c3e0df"))
+	draw_string(ThemeDB.fallback_font, beacon_position + Vector2(-48, 47), "BEACON: DORMANT", HORIZONTAL_ALIGNMENT_LEFT, 120, 10, Color("#9bb5b7"))
+
 
 func _draw_ancient_chest() -> void:
 	if not hidden_passage_open:
@@ -1879,13 +1943,15 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, -2), "POTION C/R", HORIZONTAL_ALIGNMENT_LEFT, 105, 12, Color("#e7dfc8"))
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, 15), "x%d / 3 herbs" % potions, HORIZONTAL_ALIGNMENT_LEFT, 105, 11, Color("#d7c59f"))
-	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest) and not codex_open:
+	if (rune_nearby or nearby_ruin_object >= 0 or nearby_hidden_gate or nearby_ancient_chest or nearby_memory_exit) and not codex_open:
 		draw_rect(RUNE_BUTTON_RECT, Color(0.035, 0.12, 0.13, 0.96))
-		var interaction_color := Color("#83e8e0") if rune_nearby or nearby_ancient_chest else Color("#d7c59f")
+		var interaction_color := Color("#83e8e0") if rune_nearby or nearby_ancient_chest or nearby_memory_exit else Color("#d7c59f")
 		draw_rect(RUNE_BUTTON_RECT, interaction_color, false, 2.5)
 		var interaction_label := "RUNE AWAKENED" if rune_activated else ("ACTIVATE RUNE" if rune_studied and (codex_entries & 15) == 15 else "STUDY ANCIENT RUNE")
 		if nearby_ancient_chest and not rune_nearby:
 			interaction_label = "CLAIM ANCIENT CACHE"
+		elif nearby_memory_exit and not rune_nearby:
+			interaction_label = "ENTER SHATTERED REACH"
 		elif nearby_hidden_gate and not rune_nearby:
 			interaction_label = "ENTER HIDDEN PASSAGE" if hidden_passage_open else "STUDY SEALED GATE"
 		elif not rune_nearby and nearby_ruin_object >= 0:
@@ -1902,7 +1968,7 @@ func _draw_hud() -> void:
 		draw_rect(CODEX_CLOSE_RECT, Color("#83e8e0"), false, 1.5)
 		draw_string(ThemeDB.fallback_font, CODEX_CLOSE_RECT.position + Vector2(14, 24), "CLOSE", HORIZONTAL_ALIGNMENT_LEFT, 64, 12, Color("#e0f7ee"))
 		draw_string(ThemeDB.fallback_font, Vector2(300, 187), "Collect traces from combat and ancient relics. Four clues reveal a hidden convergence.", HORIZONTAL_ALIGNMENT_LEFT, 680, 12, Color("#a9c9c2"))
-		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian"]
+		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian", "The Shattered Reach"]
 		var codex_hints: Array[String] = [
 			"A fragment remembers something its owner forgot.",
 			"Three echoes briefly become one living force.",
@@ -1914,7 +1980,8 @@ func _draw_hud() -> void:
 			"Three keepers guarded one memory through the ages.",
 			"A sealed cache still responds to the rune's pulse.",
 		"Three relic traces and the awakened rune reveal the hall below.",
-			"An ancient will protects the hall. Its relic remembers every battle."
+			"An ancient will protects the hall. Its relic remembers every battle.",
+			"Beyond the hall, a broken road leads to the Shattered Reach. The first beacon is silent."
 		]
 		var codex_found := 0
 		for entry_index in range(codex_titles.size()):
