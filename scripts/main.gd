@@ -126,7 +126,7 @@ func _input(event: InputEvent) -> void:
 		elif event.keycode == KEY_3:
 			_spend_talent(2)
 	if event is InputEventScreenTouch:
-		if event.pressed and event.position.x < WORLD_SIZE.x * 0.48 and event.position.y > WORLD_SIZE.y * 0.48:
+		if event.pressed and event.position.distance_to(JOYSTICK_CENTER) <= JOYSTICK_RADIUS * 1.65:
 			joystick_active = true
 			joystick_touch_index = event.index
 			_update_joystick(event.position)
