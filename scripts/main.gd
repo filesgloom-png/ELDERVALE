@@ -31,6 +31,7 @@ var quest_reward_claimed := false
 var second_quest_reward_claimed := false
 var mobs: Array[Dictionary] = []
 var loot_drops: Array[Dictionary] = []
+var floating_messages: Array[Dictionary] = []
 var save_path := "user://eldervale_save.json"
 
 func _ready() -> void:
@@ -47,6 +48,7 @@ func _process(delta: float) -> void:
 		_try_attack()
 	_update_mobs(delta)
 	_update_loot_drops(delta)
+	_update_floating_messages(delta)
 	var keyboard_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	var direction := joystick_vector if joystick_vector.length_squared() > 0.001 else keyboard_vector
 	move_vector = direction.limit_length(1.0)
@@ -262,19 +264,46 @@ func _update_loot_drops(delta: float) -> void:
 		drop["life"] = float(drop["life"]) - delta
 		if player_position.distance_to(drop["pos"]) <= 42.0:
 			var amount := int(drop["amount"])
+			var label := ""
+			var message_color := Color("#e0bd68")
 			match String(drop["type"]):
 				"coins":
 					player_coins += amount
+					label = "+%d COINS" % amount
+					message_color = Color("#e0bd68")
 				"herbs":
 					herbs += amount
+					label = "+%d HERBS" % amount
+					message_color = Color("#a8d48a")
 				"relic":
 					relic_shards += amount
+					label = "+%d RELIC SHARD" % amount
+					message_color = Color("#c6a0ef")
+			_add_floating_message(label, player_position + Vector2(0, -42), message_color)
 			loot_drops.remove_at(i)
 			_save_progress()
 		elif float(drop["life"]) <= 0.0:
 			loot_drops.remove_at(i)
 		else:
 			loot_drops[i] = drop
+
+func _add_floating_message(message: String, message_position: Vector2, message_color: Color) -> void:
+	floating_messages.append({
+		"text": message,
+		"pos": message_position,
+		"color": message_color,
+		"life": 1.25
+	})
+
+func _update_floating_messages(delta: float) -> void:
+	for i in range(floating_messages.size() - 1, -1, -1):
+		var message: Dictionary = floating_messages[i]
+		message["life"] = float(message["life"]) - delta
+		message["pos"] = Vector2(message["pos"]) + Vector2(0, -24.0 * delta)
+		if float(message["life"]) <= 0.0:
+			floating_messages.remove_at(i)
+		else:
+			floating_messages[i] = message
 
 func _craft_weapon_enchant() -> void:
 	if weapon_enchant >= 3 or relic_shards < 3 or herbs < 5:
@@ -320,6 +349,7 @@ func _process_level_ups() -> void:
 		player_level += 1
 		player_max_hp += 12
 		player_hp = player_max_hp
+		_add_floating_message("LEVEL UP!  %d" % player_level, player_position + Vector2(0, -68), Color("#f2d58b"))
 
 func _xp_for_next_level() -> int:
 	return 50 + (player_level - 1) * 35
@@ -382,6 +412,7 @@ func _draw() -> void:
 	_draw_mobs()
 	_draw_loot_drops()
 	_draw_player()
+	_draw_floating_messages()
 	_draw_hud()
 
 func _draw_ground() -> void:
@@ -487,6 +518,15 @@ func _draw_loot_drops() -> void:
 		draw_arc(p, 7.0, 0.0, TAU, 20, color.lightened(0.45), 2.0)
 		var glyph := "G" if drop_type == "coins" else ("H" if drop_type == "herbs" else "R")
 		draw_string(ThemeDB.fallback_font, p + Vector2(-3, 3), glyph, HORIZONTAL_ALIGNMENT_LEFT, 8, 8, Color("#22231d"))
+
+func _draw_floating_messages() -> void:
+	for message in floating_messages:
+		var life := float(message["life"])
+		var message_position: Vector2 = message["pos"]
+		var alpha := clampf(life / 0.45, 0.0, 1.0)
+		var message_color: Color = message["color"]
+		message_color.a = alpha
+		draw_string(ThemeDB.fallback_font, message_position, String(message["text"]), HORIZONTAL_ALIGNMENT_CENTER, 220, 14, message_color)
 
 func _draw_player() -> void:
 	draw_circle(player_position + Vector2(2, 15), 18.0, Color(0.02, 0.03, 0.025, 0.28))
