@@ -918,7 +918,7 @@ func _toggle_codex() -> void:
 	queue_redraw()
 
 func _discover_codex_entry(entry_id: int) -> void:
-	if entry_id < 0 or entry_id > 12:
+	if entry_id < 0 or entry_id > 13:
 		return
 	var entry_bit := 1 << entry_id
 	if (codex_entries & entry_bit) != 0:
