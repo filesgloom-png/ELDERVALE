@@ -537,7 +537,7 @@ func _load_progress() -> void:
 	potions = maxi(0, int(parsed.get("potions", 0)))
 	relic_shards = maxi(0, int(parsed.get("relic_shards", 0)))
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
-	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0))
+	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 3)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 3)
 	player_max_hp = maxi(100, int(parsed.get("player_max_hp", 100)))
