@@ -749,7 +749,6 @@ func _try_ultimate() -> void:
 		hit_count += 1
 		if int(mob["hp"]) <= 0:
 			_defeat_mob(mob)
-	var legendary_affix := _current_legendary_affix()
 	var heal_amount := int(ultimate["heal"]) + int(passive.get("heal", 0)) + int(talent_bonus["heal"]) + int(legendary_affix["heal"])
 	if hit_count > 0 and heal_amount > 0:
 		var old_hp := player_hp
