@@ -1954,12 +1954,17 @@ func _draw_tree(pos: Vector2) -> void:
 	draw_circle(pos + Vector2(-12, -23), 20.0, Color("#294334"))
 	draw_circle(pos + Vector2(12, -29), 19.0, Color("#344d37"))
 	draw_circle(pos + Vector2(-4, -36), 14.0, Color("#3d593c"))
+	# Small canopy facets create a stronger moonlit silhouette without shaders.
+	draw_circle(pos + Vector2(-17, -31), 7.0, Color("#476044"))
+	draw_circle(pos + Vector2(10, -38), 6.0, Color("#5b7046"))
+	draw_line(pos + Vector2(-5, -49), pos + Vector2(7, -53), Color("#6b8050"), 2.0)
 	draw_circle(pos + Vector2(-11, -29), 5.0, Color("#526747"))
 
 func draw_ellipse_shadow(center: Vector2, radius: Vector2) -> void:
-	for i in range(5):
-		var shrink := float(i) * 2.0
-		draw_circle(center, maxf(radius.x - shrink, 1.0), Color(0.03, 0.05, 0.04, 0.09))
+	# One soft, translucent silhouette is cheaper than five concentric circles per object.
+	draw_set_transform(center, 0.0, Vector2(radius.x / maxf(radius.y, 1.0), 1.0))
+	draw_circle(Vector2.ZERO, radius.y, Color(0.03, 0.05, 0.04, 0.24))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_mobs() -> void:
 	for mob in mobs:
