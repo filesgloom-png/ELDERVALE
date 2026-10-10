@@ -2014,7 +2014,13 @@ func _draw_mobs() -> void:
 			var windup_progress := 1.0 - clampf(attack_windup / windup_duration, 0.0, 1.0)
 			var telegraph_color := Color("#ffb45c")
 			telegraph_color.a = 0.75 + 0.25 * sin(elapsed * 18.0)
-			draw_arc(mob_pos + Vector2(0, 3), 26.0, -PI * 0.5, -PI * 0.5 + TAU * windup_progress, 32, telegraph_color, 4.0, true)
+			var telegraph_center := mob_pos + Vector2(0, 3)
+			var telegraph_radius := 26.0 + windup_progress * 5.0
+			var telegraph_fill := Color("#ff6c4d", 0.06 + windup_progress * 0.10)
+			draw_circle(telegraph_center, telegraph_radius, telegraph_fill)
+			draw_arc(telegraph_center, telegraph_radius, -PI * 0.5, -PI * 0.5 + TAU * windup_progress, 32, telegraph_color, 4.0, true)
+			if threat_distance <= 150.0:
+				draw_string(ThemeDB.fallback_font, mob_pos + Vector2(-40, -43), "ATTACK!", HORIZONTAL_ALIGNMENT_CENTER, 80, 11, Color("#ffd0a1"))
 		if mob_name == "Ruins Stalker":
 			var rune_glow := 0.35 + 0.22 * sin(elapsed * 3.2 + mob_pos.x * 0.02)
 			var rune_color := Color("#ad8bf0")
