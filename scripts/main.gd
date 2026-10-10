@@ -24,6 +24,7 @@ var player_hit_flash := 0.0
 var dodge_time := 0.0
 var dodge_cooldown := 0.0
 var dodge_direction: Vector2 = Vector2.RIGHT
+var critical_flash := 0.0
 var weapon_tier := 0
 var armor_tier := 0
 var herbs := 0
@@ -54,6 +55,7 @@ func _process(delta: float) -> void:
 	player_hit_flash = maxf(player_hit_flash - delta, 0.0)
 	dodge_time = maxf(dodge_time - delta, 0.0)
 	dodge_cooldown = maxf(dodge_cooldown - delta, 0.0)
+	critical_flash = maxf(critical_flash - delta, 0.0)
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	skill_cooldown = maxf(skill_cooldown - delta, 0.0)
 	mob_attack_cooldown = maxf(mob_attack_cooldown - delta, 0.0)
@@ -306,10 +308,18 @@ func _try_attack() -> void:
 	var slash_direction := (Vector2(target["pos"]) - player_position).normalized()
 	combat_effects.append({"kind": "slash", "pos": player_position, "dir": slash_direction, "life": 0.20, "duration": 0.20})
 	var damage := 20 + weapon_tier * 8 + weapon_enchant * 4
+	var critical_chance := minf(0.08 + float(weapon_enchant) * 0.04, 0.24)
+	var is_critical := randf() < critical_chance
+	if is_critical:
+		damage = int(round(float(damage) * 1.75))
+		critical_flash = 0.24
+		combat_effects.append({"kind": "critical", "pos": Vector2(target["pos"]), "life": 0.34, "duration": 0.34})
+		_add_floating_message("CRITICAL! -%d" % damage, Vector2(target["pos"]) + Vector2(0, -52), Color("#ffd56f"))
+	else:
+		_add_floating_message("-%d" % damage, Vector2(target["pos"]) + Vector2(0, -36), Color("#f2b0a0"))
 	target["hp"] = int(target["hp"]) - damage
 	target["hit_flash"] = 0.18
 	combat_effects.append({"kind": "hit", "pos": Vector2(target["pos"]), "life": 0.18, "duration": 0.18})
-	_add_floating_message("-%d" % damage, Vector2(target["pos"]) + Vector2(0, -36), Color("#f2b0a0"))
 	if int(target["hp"]) <= 0:
 		_defeat_mob(target)
 	_save_progress()
@@ -326,10 +336,18 @@ func _try_skill() -> void:
 			continue
 		if player_position.distance_to(mob["pos"]) <= 150.0:
 			var damage := 35 + weapon_tier * 5 + weapon_enchant * 3
+			var critical_chance := minf(0.05 + float(weapon_enchant) * 0.03, 0.20)
+			var is_critical := randf() < critical_chance
+			if is_critical:
+				damage = int(round(float(damage) * 1.5))
+				critical_flash = 0.24
+				combat_effects.append({"kind": "critical", "pos": Vector2(mob["pos"]), "life": 0.34, "duration": 0.34})
+				_add_floating_message("SKILL CRIT! -%d" % damage, Vector2(mob["pos"]) + Vector2(0, -52), Color("#ffd56f"))
+			else:
+				_add_floating_message("-%d" % damage, Vector2(mob["pos"]) + Vector2(0, -36), Color("#a8d8ef"))
 			mob["hp"] = int(mob["hp"]) - damage
 			mob["hit_flash"] = 0.18
 			combat_effects.append({"kind": "hit", "pos": Vector2(mob["pos"]), "life": 0.18, "duration": 0.18})
-			_add_floating_message("-%d" % damage, Vector2(mob["pos"]) + Vector2(0, -36), Color("#a8d8ef"))
 			hit_any = true
 			if int(mob["hp"]) <= 0:
 				_defeat_mob(mob)
@@ -828,6 +846,15 @@ func _draw_combat_effects() -> void:
 			var slash_color := Color("#f5dfad")
 			slash_color.a = (1.0 - progress) * 0.92
 			draw_arc(center, 30.0 + progress * 8.0, direction.angle() - 0.95, direction.angle() + 0.95, 20, slash_color, 4.0, true)
+		elif String(effect["kind"]) == "critical":
+			var critical_color := Color("#ffd56f")
+			critical_color.a = (1.0 - progress) * 0.95
+			var critical_center: Vector2 = effect["pos"]
+			for ray_index in range(10):
+				var ray_angle := TAU * float(ray_index) / 10.0 + progress * 0.25
+				var ray_direction := Vector2(cos(ray_angle), sin(ray_angle))
+				draw_line(critical_center + ray_direction * (8.0 + progress * 5.0), critical_center + ray_direction * (24.0 + progress * 16.0), critical_color, 3.0)
+			draw_arc(critical_center, 18.0 + progress * 22.0, 0.0, TAU, 28, critical_color, 2.5, true)
 		elif String(effect["kind"]) == "dodge":
 			var direction: Vector2 = effect["dir"]
 			var dodge_color := Color("#9fe6ef")
@@ -926,7 +953,7 @@ func _draw_hud() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(42, 144), "ARMOR reduces damage • SKILL cooldown %.1fs" % skill_cooldown, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 164), "HERBS %d   POTIONS %d   RELIC SHARDS %d" % [herbs, potions, relic_shards], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 202), "GUARDIAN CORES %d   ANCIENT CACHES %d" % [guardian_cores, ancient_caches], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e7bd9a"))
-	draw_string(ThemeDB.fallback_font, Vector2(42, 184), "DAMAGE %d  •  ARMOR %d  •  RANGE 88" % [20 + weapon_tier * 8 + weapon_enchant * 4, armor_tier * 2 + armor_enchant * 2], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d7c59f"))
+	draw_string(ThemeDB.fallback_font, Vector2(42, 184), "DMG %d  •  CRIT %d%%  •  ARMOR %d" % [20 + weapon_tier * 8 + weapon_enchant * 4, int(round(minf(0.08 + float(weapon_enchant) * 0.04, 0.24) * 100.0)), armor_tier * 2 + armor_enchant * 2], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d7c59f"))
 	var forge_weapon_center := _forge_weapon_button_center()
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color("#c49a62"), false, 2.0)
