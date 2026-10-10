@@ -120,6 +120,8 @@ var guardian_cores := 0
 var ancient_caches := 0
 var echo_shards := 0
 var echo_surge_time := 0.0
+var codex_open := false
+var codex_entries := 0
 var weapon_enchant := 0
 var armor_enchant := 0
 var quest_reward_claimed := false
@@ -200,6 +202,8 @@ func _input(event: InputEvent) -> void:
 			_spend_talent(1)
 		elif event.keycode == KEY_3:
 			_spend_talent(2)
+		elif event.keycode == KEY_J:
+			_toggle_codex()
 	if event is InputEventScreenTouch:
 		if event.pressed and event.position.distance_to(JOYSTICK_CENTER) <= JOYSTICK_RADIUS * 1.65:
 			joystick_active = true
@@ -215,6 +219,13 @@ func _input(event: InputEvent) -> void:
 		_update_joystick(event.position)
 
 func _handle_action_touch(screen_position: Vector2) -> void:
+	if codex_open:
+		codex_open = false
+		queue_redraw()
+		return
+	if Rect2(960.0, 15.0, 300.0, 130.0).has_point(screen_position):
+		_toggle_codex()
+		return
 	for branch in range(3):
 		if screen_position.distance_to(_talent_button_center(branch)) <= 68.0:
 			_spend_talent(branch)
@@ -780,6 +791,7 @@ func _defeat_mob(mob: Dictionary) -> void:
 		mob["respawn_timer"] = 8.0
 	else:
 		guardian_defeated = true
+		_discover_codex_entry(2)
 	kills += 1
 	_spawn_loot_drop(mob["pos"], "coins", (35 + player_level * 3) if is_boss else (3 + player_level))
 	_spawn_loot_drop(mob["pos"] + Vector2(-15, 8), "herbs", 1 + int(kills % 2))
@@ -812,11 +824,42 @@ func _defeat_mob(mob: Dictionary) -> void:
 		player_coins += 50
 	_save_progress()
 
+func _toggle_codex() -> void:
+	codex_open = not codex_open
+	queue_redraw()
+
+func _discover_codex_entry(entry_id: int) -> void:
+	if entry_id < 0 or entry_id > 4:
+		return
+	var entry_bit := 1 << entry_id
+	if (codex_entries & entry_bit) != 0:
+		return
+	codex_entries = codex_entries | entry_bit
+	var titles: Array[String] = [
+		"A Voice in the Ash",
+		"Resonance Awakened",
+		"Memory of the Guardian",
+		"The Cache Inscription",
+		"The First Convergence"
+	]
+	var reward_xp := 100 if entry_id == 4 else 20
+	var reward_coins := 50 if entry_id == 4 else 10
+	_gain_xp(reward_xp)
+	player_coins += reward_coins
+	_add_floating_message("CODEX FOUND: %s" % titles[entry_id], player_position + Vector2(0, -68), Color("#83e8e0"))
+	if entry_id == 4:
+		_add_floating_message("MYSTERY THREAD COMPLETE  •  +%d XP / +%d COINS" % [reward_xp, reward_coins], player_position + Vector2(0, -92), Color("#ffd28b"))
+	elif (codex_entries & 15) == 15:
+		_discover_codex_entry(4)
+	_save_progress()
+	queue_redraw()
+
 func _activate_echo_surge() -> void:
 	if echo_shards < 3 or echo_surge_time > 0.0:
 		return
 	echo_shards -= 3
 	echo_surge_time = 12.0
+	_discover_codex_entry(1)
 	_show_passive_proc("WORLD ECHO RESONANCE  •  DAMAGE +12%", player_position, Color("#83e8e0"))
 	_save_progress()
 	queue_redraw()
@@ -900,10 +943,12 @@ func _update_loot_drops(delta: float) -> void:
 					message_color = Color("#ff9877")
 				"ancient_cache":
 					ancient_caches += amount
+					_discover_codex_entry(3)
 					label = "ANCIENT CACHE ACQUIRED"
 					message_color = Color("#e7d49a")
 				"echo":
 					echo_shards += amount
+					_discover_codex_entry(0)
 					label = "+%d WORLD ECHO" % amount
 					message_color = Color("#83e8e0")
 					if echo_surge_time <= 0.0:
@@ -1058,7 +1103,7 @@ func _xp_for_next_level() -> int:
 
 func _save_progress() -> void:
 	var data := {
-		"save_version": 3,
+		"save_version": 4,
 		"level": player_level,
 		"talent_points": talent_points,
 		"talent_ranks": talent_ranks,
@@ -1078,6 +1123,7 @@ func _save_progress() -> void:
 		"guardian_cores": guardian_cores,
 		"ancient_caches": ancient_caches,
 		"echo_shards": echo_shards,
+		"codex_entries": codex_entries,
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
@@ -1160,6 +1206,7 @@ func _load_progress() -> void:
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
 	echo_shards = clampi(int(parsed.get("echo_shards", 0)), 0, 999999)
+	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 31)
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
 	player_max_hp = clampi(int(parsed.get("player_max_hp", 100)), 100, 100000)
@@ -1455,7 +1502,7 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(43, 80, 300.0 * float(player_hp) / float(player_max_hp), 8), Color("#b84d46"))
 	draw_string(ThemeDB.fallback_font, Vector2(43, 108), "XP %d / %d     COINS %d" % [player_xp, _xp_for_next_level(), player_coins], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d7c59f"))
 	draw_rect(Rect2(WORLD_SIZE.x - 310, 22, 288, 116), Color(0.035, 0.055, 0.05, 0.9))
-	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 45), "QUEST I: ASHEN FRONTIER", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#d7c59f"))
+	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 45), "QUESTS  •  CODEX [J]", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#d7c59f"))
 	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 65), "Defeat 3: %d / 3" % mini(kills, 3), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c5cfba"))
 	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 82), "60 XP + 25 coins" if not quest_reward_claimed else "Reward claimed", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#aab5a1"))
 	draw_string(ThemeDB.fallback_font, Vector2(WORLD_SIZE.x - 291, 103), "QUEST II: HUNT 5  %d / 5" % mini(kills, 5), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d7c59f"))
@@ -1547,3 +1594,28 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(potion_center - Vector2(60, 30), Vector2(120, 60)), Color("#9fc18b"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, -2), "POTION C/R", HORIZONTAL_ALIGNMENT_LEFT, 105, 12, Color("#e7dfc8"))
 	draw_string(ThemeDB.fallback_font, potion_center + Vector2(-48, 15), "x%d / 3 herbs" % potions, HORIZONTAL_ALIGNMENT_LEFT, 105, 11, Color("#d7c59f"))
+	if codex_open:
+		var panel_rect := Rect2(260.0, 112.0, 760.0, 500.0)
+		draw_rect(panel_rect, Color(0.018, 0.028, 0.032, 0.98))
+		draw_rect(panel_rect, Color("#83e8e0"), false, 3.0)
+		draw_string(ThemeDB.fallback_font, Vector2(300, 158), "MEMORY OF ELDERVALE  •  DISCOVERY CODEX", HORIZONTAL_ALIGNMENT_LEFT, 680, 23, Color("#d9f6ee"))
+		draw_string(ThemeDB.fallback_font, Vector2(300, 187), "Collect traces from combat and ancient relics. Four clues reveal a hidden convergence.", HORIZONTAL_ALIGNMENT_LEFT, 680, 12, Color("#a9c9c2"))
+		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence"]
+		var codex_hints: Array[String] = [
+			"A fragment remembers something its owner forgot.",
+			"Three echoes briefly become one living force.",
+			"The Ruin Guardian carried a memory, not just a key.",
+			"An ancient cache bears the same mark as the echoes.",
+			"The four traces point toward a mystery beyond battle."
+		]
+		var codex_found := 0
+		for entry_index in range(codex_titles.size()):
+			var discovered := (codex_entries & (1 << entry_index)) != 0
+			if discovered:
+				codex_found += 1
+			var entry_y := 232.0 + float(entry_index) * 62.0
+			draw_circle(Vector2(310, entry_y - 5.0), 9.0, Color("#83e8e0") if discovered else Color("#53615d"))
+			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y), "%02d  %s" % [entry_index + 1, codex_titles[entry_index] if discovered else "UNKNOWN TRACE"], HORIZONTAL_ALIGNMENT_LEFT, 620, 14, Color("#e0f7ee") if discovered else Color("#9ba7a2"))
+			draw_string(ThemeDB.fallback_font, Vector2(332, entry_y + 20.0), codex_hints[entry_index] if discovered else "The details remain hidden until the trace is found.", HORIZONTAL_ALIGNMENT_LEFT, 640, 11, Color("#a9c9c2") if discovered else Color("#687571"))
+		draw_string(ThemeDB.fallback_font, Vector2(300, 574), "DISCOVERED %d / %d" % [codex_found, codex_titles.size()], HORIZONTAL_ALIGNMENT_LEFT, 220, 13, Color("#ffd28b"))
+		draw_string(ThemeDB.fallback_font, Vector2(570, 574), "TAP ANYWHERE OR PRESS J TO CLOSE", HORIZONTAL_ALIGNMENT_LEFT, 400, 12, Color("#c5cfba"))
