@@ -146,6 +146,8 @@ var armor_enchant := 0
 var quest_reward_claimed := false
 var second_quest_reward_claimed := false
 var guardian_defeated := false
+var memory_guardian_defeated := false
+var memory_relic_owned := false
 var mobs: Array[Dictionary] = []
 var loot_drops: Array[Dictionary] = []
 var floating_messages: Array[Dictionary] = []
@@ -157,6 +159,7 @@ func _ready() -> void:
 	_spawn_initial_mobs()
 	_load_progress()
 	_ensure_guardian_encounter()
+	_ensure_memory_guardian_encounter()
 	queue_redraw()
 
 func _process(delta: float) -> void:
@@ -447,6 +450,12 @@ func _current_legendary_affix() -> Dictionary:
 				affix["heal"] = 3
 			"Phantom", "Pathfinder", "Shapebinder", "Tinkerer":
 				affix["armor"] = 1
+	if memory_relic_owned:
+		affix["name"] = "RELIC OF MEMORY"
+		affix["damage"] = float(affix["damage"]) * 1.08
+		affix["skill"] = float(affix["skill"]) * 1.10
+		affix["crit"] = float(affix["crit"]) + 0.03
+		affix["armor"] = int(affix["armor"]) + 2
 	return affix
 
 func _spend_talent(branch: int) -> void:
@@ -572,6 +581,9 @@ func _update_mobs(delta: float) -> void:
 		elif mob_name == "Ruin Guardian":
 			attack_range = 58.0
 			windup_duration = 0.92
+		elif mob_name == "Memory Guardian":
+			attack_range = 54.0
+			windup_duration = 0.78
 		var local_attack_cooldown := maxf(float(mob.get("attack_cooldown", 0.0)) - delta, 0.0)
 		mob["attack_cooldown"] = local_attack_cooldown
 		if mob_name == "Ruin Guardian":
@@ -830,9 +842,18 @@ func _defeat_mob(mob: Dictionary) -> void:
 	if not mob["alive"]:
 		return
 	var is_boss := bool(mob.get("boss", false))
+	var is_memory_boss := String(mob["name"]) == "Memory Guardian"
 	mob["alive"] = false
 	if not is_boss:
 		mob["respawn_timer"] = 8.0
+	elif is_memory_boss:
+		memory_guardian_defeated = true
+		memory_relic_owned = true
+		player_coins += 300
+		relic_shards += 5
+		guardian_cores += 1
+		_discover_codex_entry(10)
+		_add_floating_message("RELIC OF MEMORY CLAIMED  •  +8% DAMAGE / +10% SKILL", player_position + Vector2(0, -94), Color("#83e8e0"))
 	else:
 		guardian_defeated = true
 		_discover_codex_entry(2)
@@ -848,7 +869,7 @@ func _defeat_mob(mob: Dictionary) -> void:
 	if is_boss:
 		_spawn_loot_drop(mob["pos"] + Vector2(-26, -18), "guardian_core", 1)
 		_spawn_loot_drop(mob["pos"] + Vector2(26, -18), "ancient_cache", 1)
-		_add_floating_message("GUARDIAN DEFEATED!", mob["pos"] + Vector2(0, -74), Color("#ffd28b"))
+		_add_floating_message("MEMORY GUARDIAN DEFEATED!" if is_memory_boss else "GUARDIAN DEFEATED!", mob["pos"] + Vector2(0, -74), Color("#83e8e0") if is_memory_boss else Color("#ffd28b"))
 	_gain_xp(int(mob["xp"]))
 	if not is_boss:
 		_ensure_guardian_encounter()
@@ -873,7 +894,7 @@ func _toggle_codex() -> void:
 	queue_redraw()
 
 func _discover_codex_entry(entry_id: int) -> void:
-	if entry_id < 0 or entry_id > 9:
+	if entry_id < 0 or entry_id > 10:
 		return
 	var entry_bit := 1 << entry_id
 	if (codex_entries & entry_bit) != 0:
@@ -889,10 +910,11 @@ func _discover_codex_entry(entry_id: int) -> void:
 		"The Watchstone Road",
 		"The Pilgrim's Oath",
 		"The Sealed Memory",
-		"The Hall Beneath"
+		"The Hall Beneath",
+		"The Memory Guardian"
 	]
-	var reward_xp := 150 if entry_id == 5 else (100 if entry_id == 4 else 20)
-	var reward_coins := 75 if entry_id == 5 else (50 if entry_id == 4 else 10)
+	var reward_xp := 400 if entry_id == 10 else (150 if entry_id == 5 else (100 if entry_id == 4 else 20))
+	var reward_coins := 250 if entry_id == 10 else (75 if entry_id == 5 else (50 if entry_id == 4 else 10))
 	_gain_xp(reward_xp)
 	player_coins += reward_coins
 	_add_floating_message("CODEX FOUND: %s" % titles[entry_id], player_position + Vector2(0, -68), Color("#83e8e0"))
@@ -953,6 +975,7 @@ func _claim_ancient_chest() -> void:
 	_gain_xp(250)
 	_add_floating_message("ANCIENT CACHE CLAIMED  •  +250 XP / +150 COINS", player_position + Vector2(0, -70), Color("#ffd28b"))
 	_add_floating_message("+3 RELIC SHARDS  •  +5 HERBS", player_position + Vector2(0, -92), Color("#83e8e0"))
+	_ensure_memory_guardian_encounter()
 	_save_progress()
 	queue_redraw()
 
@@ -1028,6 +1051,28 @@ func _ensure_guardian_encounter() -> void:
 		"boss": true
 	})
 	_add_floating_message("RUIN GUARDIAN AWAKENS", Vector2(WORLD_SIZE.x * 0.5, 190), Color("#c7a5ff"))
+
+
+func _ensure_memory_guardian_encounter() -> void:
+	if not hidden_passage_open or not ancient_chest_claimed or memory_guardian_defeated:
+		return
+	for mob in mobs:
+		if String(mob["name"]) == "Memory Guardian":
+			return
+	mobs.append({
+		"name": "Memory Guardian",
+		"pos": Vector2(1120.0, 350.0),
+		"hp": 520,
+		"max_hp": 520,
+		"damage": 23,
+		"speed": 34.0,
+		"xp": 420,
+		"alive": true,
+		"boss": true,
+		"memory_boss": true
+	})
+	_add_floating_message("THE MEMORY GUARDIAN AWAKENS", Vector2(1110.0, 290.0), Color("#83e8e0"))
+	_add_floating_message("A LAST KEEPER STANDS BETWEEN YOU AND THE RELIC", Vector2(1110.0, 270.0), Color("#d7c59f"))
 
 func _spawn_loot_drop(drop_position: Vector2, drop_type: String, amount: int) -> void:
 	loot_drops.append({
@@ -1224,7 +1269,7 @@ func _xp_for_next_level() -> int:
 
 func _save_progress() -> void:
 	var data := {
-		"save_version": 4,
+		"save_version": 5,
 		"level": player_level,
 		"talent_points": talent_points,
 		"talent_ranks": talent_ranks,
@@ -1249,6 +1294,8 @@ func _save_progress() -> void:
 		"rune_activated": rune_activated,
 		"hidden_passage_open": hidden_passage_open,
 		"ancient_chest_claimed": ancient_chest_claimed,
+		"memory_guardian_defeated": memory_guardian_defeated,
+		"memory_relic_owned": memory_relic_owned,
 		"weapon_enchant": weapon_enchant,
 		"armor_enchant": armor_enchant,
 		"player_hp": player_hp,
@@ -1331,11 +1378,13 @@ func _load_progress() -> void:
 	guardian_cores = maxi(0, int(parsed.get("guardian_cores", 0)))
 	ancient_caches = maxi(0, int(parsed.get("ancient_caches", 0)))
 	echo_shards = clampi(int(parsed.get("echo_shards", 0)), 0, 999999)
-	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 1023)
+	codex_entries = clampi(int(parsed.get("codex_entries", 0)), 0, 2047)
 	rune_studied = bool(parsed.get("rune_studied", false))
 	rune_activated = bool(parsed.get("rune_activated", false))
 	hidden_passage_open = bool(parsed.get("hidden_passage_open", rune_activated and (codex_entries & 448) == 448))
 	ancient_chest_claimed = bool(parsed.get("ancient_chest_claimed", false))
+	memory_guardian_defeated = bool(parsed.get("memory_guardian_defeated", false))
+	memory_relic_owned = bool(parsed.get("memory_relic_owned", memory_guardian_defeated))
 	weapon_enchant = clampi(int(parsed.get("weapon_enchant", 0)), 0, 4)
 	armor_enchant = clampi(int(parsed.get("armor_enchant", 0)), 0, 4)
 	player_max_hp = clampi(int(parsed.get("player_max_hp", 100)), 100, 100000)
@@ -1554,24 +1603,25 @@ func _draw_mobs() -> void:
 		var mob_pos: Vector2 = mob["pos"]
 		var mob_name := String(mob["name"])
 		var is_wolf := mob_name == "Ash Wolf"
-		var is_guardian := mob_name == "Ruin Guardian"
-		var body_color := Color("#8e6553") if is_wolf else (Color("#887d9c") if mob_name == "Ruins Stalker" else (Color("#b95f49") if is_guardian else Color("#a58a53")))
+		var is_memory_guardian := mob_name == "Memory Guardian"
+		var is_guardian := mob_name == "Ruin Guardian" or is_memory_guardian
+		var body_color := Color("#8e6553") if is_wolf else (Color("#887d9c") if mob_name == "Ruins Stalker" else (Color("#57bdb0") if is_memory_guardian else (Color("#b95f49") if is_guardian else Color("#a58a53"))))
 		if float(mob.get("hit_flash", 0.0)) > 0.0:
 			body_color = Color("#fff0d4")
 		draw_circle(mob_pos + Vector2(1, 10), 23.0 if is_guardian else 15.0, Color(0.02, 0.025, 0.02, 0.35))
 		if is_guardian:
 			var guardian_enraged := float(mob["hp"]) <= float(mob["max_hp"]) * 0.5
 			var guardian_glow := 0.28 + 0.18 * sin(elapsed * (5.0 if guardian_enraged else 3.0))
-			var guardian_color := Color("#ff4d35") if guardian_enraged else Color("#d36b55")
+			var guardian_color := (Color("#a5fff0") if guardian_enraged else Color("#4fd5c4")) if is_memory_guardian else (Color("#ff4d35") if guardian_enraged else Color("#d36b55"))
 			guardian_color.a = guardian_glow
 			draw_arc(mob_pos, 29.0 + sin(elapsed * 2.4) * 2.0, 0.0, TAU, 36, guardian_color, 4.0, true)
 			var slam_windup := float(mob.get("slam_windup", 0.0))
 			if slam_windup > 0.0:
 				var warning_alpha := 0.18 + 0.08 * sin(elapsed * 18.0)
-				var danger_fill := Color("#f05b48")
+				var danger_fill := Color("#48d9c4") if is_memory_guardian else Color("#f05b48")
 				danger_fill.a = warning_alpha
 				draw_circle(mob_pos, 112.0, danger_fill)
-				var danger_outline := Color("#ff7658")
+				var danger_outline := Color("#a5fff0") if is_memory_guardian else Color("#ff7658")
 				danger_outline.a = 0.88
 				draw_arc(mob_pos, 112.0, 0.0, TAU, 56, danger_outline, 4.0, true)
 				for marker_index in range(8):
@@ -1602,8 +1652,9 @@ func _draw_mobs() -> void:
 			draw_arc(mob_pos + Vector2(0, 2), 16.0 + sin(elapsed * 4.0) * 1.5, 0.0, TAU, 24, rune_color, 2.0, true)
 		draw_circle(mob_pos, 21.0 if is_guardian else 13.0, body_color)
 		draw_circle(mob_pos + Vector2(-4, -5), 7.0 if is_guardian else 4.0, body_color.lightened(0.22))
-		draw_circle(mob_pos + Vector2(-5, -2), 3.0, Color("#ffd27b") if is_guardian else Color("#e3b36b"))
-		draw_circle(mob_pos + Vector2(5, -2), 3.0, Color("#ffd27b") if is_guardian else Color("#e3b36b"))
+		var eye_color := Color("#bffff2") if is_memory_guardian else (Color("#ffd27b") if is_guardian else Color("#e3b36b"))
+		draw_circle(mob_pos + Vector2(-5, -2), 3.0, eye_color)
+		draw_circle(mob_pos + Vector2(5, -2), 3.0, eye_color)
 		var bar_width := 58.0 if is_guardian else 34.0
 		draw_rect(Rect2(mob_pos + Vector2(-bar_width / 2.0, -24), Vector2(bar_width, 4)), Color("#241e1d"))
 		draw_rect(Rect2(mob_pos + Vector2(-bar_width / 2.0, -24), Vector2(bar_width * clampf(float(mob["hp"]) / float(mob["max_hp"]), 0.0, 1.0), 4)), Color("#b94d45"))
@@ -1713,11 +1764,13 @@ func _draw_hud() -> void:
 		if bool(mob.get("boss", false)) and bool(mob["alive"]):
 			var boss_hp_ratio := clampf(float(mob["hp"]) / float(mob["max_hp"]), 0.0, 1.0)
 			draw_rect(Rect2(440, 20, 400, 48), Color(0.035, 0.025, 0.03, 0.92))
-			var boss_title := "RUIN GUARDIAN  •  ENRAGED" if float(mob["hp"]) <= float(mob["max_hp"]) * 0.5 else "RUIN GUARDIAN"
-			draw_string(ThemeDB.fallback_font, Vector2(440, 16), boss_title, HORIZONTAL_ALIGNMENT_CENTER, 400, 16, Color("#ff896d") if float(mob["hp"]) <= float(mob["max_hp"]) * 0.5 else Color("#f0c6b4"))
-			draw_rect(Rect2(456, 35, 368, 14), Color("#382629"))
-			draw_rect(Rect2(456, 35, 368.0 * boss_hp_ratio, 14), Color("#c74f46"))
-			draw_rect(Rect2(456, 35, 368, 14), Color("#f0a08a"), false, 1.5)
+			var is_memory_boss := String(mob["name"]) == "Memory Guardian"
+			var boss_title := String(mob["name"]).to_upper() + ("  •  ENRAGED" if float(mob["hp"]) <= float(mob["max_hp"]) * 0.5 else "")
+			var boss_color := Color("#83e8e0") if is_memory_boss else Color("#ff896d")
+			draw_string(ThemeDB.fallback_font, Vector2(440, 16), boss_title, HORIZONTAL_ALIGNMENT_CENTER, 400, 16, boss_color)
+			draw_rect(Rect2(456, 35, 368, 14), Color("#243b39") if is_memory_boss else Color("#382629"))
+			draw_rect(Rect2(456, 35, 368.0 * boss_hp_ratio, 14), Color("#4fc9b9") if is_memory_boss else Color("#c74f46"))
+			draw_rect(Rect2(456, 35, 368, 14), boss_color.lightened(0.2), false, 1.5)
 			break
 	draw_rect(Rect2(22, 20, 350, 106), Color(0.035, 0.055, 0.05, 0.9))
 	draw_rect(Rect2(22, 20, 4, 106), Color("#b98a51"))
@@ -1849,7 +1902,7 @@ func _draw_hud() -> void:
 		draw_rect(CODEX_CLOSE_RECT, Color("#83e8e0"), false, 1.5)
 		draw_string(ThemeDB.fallback_font, CODEX_CLOSE_RECT.position + Vector2(14, 24), "CLOSE", HORIZONTAL_ALIGNMENT_LEFT, 64, 12, Color("#e0f7ee"))
 		draw_string(ThemeDB.fallback_font, Vector2(300, 187), "Collect traces from combat and ancient relics. Four clues reveal a hidden convergence.", HORIZONTAL_ALIGNMENT_LEFT, 680, 12, Color("#a9c9c2"))
-		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath"]
+		var codex_titles: Array[String] = ["A Voice in the Ash", "Resonance Awakened", "Memory of the Guardian", "The Cache Inscription", "The First Convergence", "The Rune of Convergence", "The Watchstone Road", "The Pilgrim's Oath", "The Sealed Memory", "The Hall Beneath", "The Memory Guardian"]
 		var codex_hints: Array[String] = [
 			"A fragment remembers something its owner forgot.",
 			"Three echoes briefly become one living force.",
@@ -1860,7 +1913,8 @@ func _draw_hud() -> void:
 			"This watchstone marks a road erased from ordinary maps.",
 			"Three keepers guarded one memory through the ages.",
 			"A sealed cache still responds to the rune's pulse.",
-		"Three relic traces and the awakened rune reveal the hall below."
+		"Three relic traces and the awakened rune reveal the hall below.",
+			"An ancient will protects the hall. Its relic remembers every battle."
 		]
 		var codex_found := 0
 		for entry_index in range(codex_titles.size()):
