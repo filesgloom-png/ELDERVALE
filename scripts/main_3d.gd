@@ -38,6 +38,8 @@ var hp_bar: ProgressBar
 var boss_hp_bar: ProgressBar
 var boss_panel: PanelContainer
 var boss_phase_label: Label
+var boss_hud_hp := -1
+var boss_hud_phase := -1
 var status_label: Label
 var target_label: Label
 var world_time := 0.0
@@ -491,11 +493,16 @@ func _update_boss_hud(enemy: Node3D) -> void:
 	if boss_panel == null or boss_hp_bar == null or boss_phase_label == null:
 		return
 	var hp := clampi(int(enemy_health.get(enemy, 0)), 0, 650)
-	var phase := "PHASE III  •  ENRAGED" if hp <= 195 else ("PHASE II  •  AWAKENED" if hp <= 422 else "PHASE I  •  DORMANT")
+	var phase_index := 2 if hp <= 195 else (1 if hp <= 422 else 0)
+	var phase := "PHASE III  •  ENRAGED" if phase_index == 2 else ("PHASE II  •  AWAKENED" if phase_index == 1 else "PHASE I  •  DORMANT")
 	boss_panel.visible = hp > 0
-	boss_hp_bar.value = hp
-	boss_phase_label.text = "FROST WARDEN   %d / 650 HP   •   %s" % [hp, phase]
-	boss_hp_bar.add_theme_stylebox_override("fill", _hud_bar_style(Color("#74e9f2") if hp > 422 else (Color("#4db8d3") if hp > 195 else Color("#b77be8"))))
+	if hp != boss_hud_hp:
+		boss_hud_hp = hp
+		boss_hp_bar.value = hp
+		boss_phase_label.text = "FROST WARDEN   %d / 650 HP   •   %s" % [hp, phase]
+	if phase_index != boss_hud_phase:
+		boss_hud_phase = phase_index
+		boss_hp_bar.add_theme_stylebox_override("fill", _hud_bar_style(Color("#74e9f2") if phase_index == 0 else (Color("#4db8d3") if phase_index == 1 else Color("#b77be8"))))
 
 func _refresh_boss_hud() -> void:
 	var boss: Node3D = null
