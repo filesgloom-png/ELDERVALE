@@ -2212,8 +2212,12 @@ func _draw_hud() -> void:
 	draw_arc(attack_center, 52.0, 0.0, TAU, 48, Color("#d8a66d"), 3.0)
 	draw_string(ThemeDB.fallback_font, attack_center + Vector2(-28, 5), "ATTACK", HORIZONTAL_ALIGNMENT_LEFT, 80, 15, Color("#f0dfc4"))
 	var dodge_center := _dodge_button_center()
+	var dodge_cd_max := maxf(0.8, float(_current_class_data().get("dodge_cd", 2.8)) + float(_current_specialization_data().get("dodge_cd", 0.0)))
+	var dodge_cd_ratio := clampf(dodge_cooldown / dodge_cd_max, 0.0, 1.0)
 	draw_circle(dodge_center, 40.0, Color(0.08, 0.22, 0.25, 0.88))
-	draw_arc(dodge_center, 40.0, 0.0, TAU, 40, Color("#9fe6ef"), 3.0)
+	draw_arc(dodge_center, 40.0, 0.0, TAU, 40, Color("#547d82") if dodge_cooldown > 0.0 else Color("#9fe6ef"), 3.0)
+	if dodge_cooldown > 0.0:
+		draw_arc(dodge_center, 40.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - dodge_cd_ratio), 40, Color("#9fe6ef"), 4.0, true)
 	draw_string(ThemeDB.fallback_font, dodge_center + Vector2(-25, -2), "DODGE", HORIZONTAL_ALIGNMENT_LEFT, 70, 12, Color("#d7f4f5"))
 	draw_string(ThemeDB.fallback_font, dodge_center + Vector2(-24, 15), "%.1fs" % dodge_cooldown if dodge_cooldown > 0.0 else "READY  V", HORIZONTAL_ALIGNMENT_LEFT, 70, 10, Color("#9fe6ef"))
 	draw_string(ThemeDB.fallback_font, Vector2(42, 144), "ARMOR reduces damage • SKILL cooldown %.1fs" % skill_cooldown, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#c5cfba"))
