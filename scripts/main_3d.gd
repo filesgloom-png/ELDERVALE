@@ -31,6 +31,7 @@ var quest_stage := 0
 var quest_stage_progress := 0
 var quest_completed := false
 var wave_respawn_timer := -1.0
+var wave_number := 0
 var enemies: Array[Node3D] = []
 var hp_bar: ProgressBar
 var status_label: Label
@@ -372,17 +373,26 @@ func _refresh_equipment_visuals() -> void:
 		shoulder_runes.visible = armor_level >= 4
 
 func _build_enemies() -> void:
+	wave_number += 1
 	var positions := [Vector3(4, 0, -4), Vector3(-5, 0, -10), Vector3(8, 0, -17), Vector3(-9, 0, -20)]
+	var has_boss := wave_number % 3 == 0
+	if has_boss:
+		positions.append(Vector3(0, 0, -25))
 	for i in range(positions.size()):
 		var enemy := Node3D.new()
-		enemy.name = "AshWolf" if i < 3 else "RuinStalker"
+		enemy.name = "FrostWarden" if i == 4 else ("AshWolf" if i < 3 else "RuinStalker")
 		enemy.position = positions[i]
 		add_child(enemy)
-		var hide_mat := _mat(Color("#8b6553") if i < 3 else Color("#565c67"), 0.8)
+		var hide_color := Color("#8b6553") if i < 3 else (Color("#7edbd9") if i == 4 else Color("#565c67"))
+		var hide_mat := _mat(hide_color, 0.8, 0.18 if i == 4 else 0.0)
+		if i == 4:
+			hide_mat.emission_enabled = true
+			hide_mat.emission = Color("#3da9b9")
+			hide_mat.emission_energy_multiplier = 0.65
 		var fur := _mesh_node(enemy, CapsuleMesh.new(), hide_mat, Vector3(0, 0.72, 0), "EnemyBody")
-		fur.scale = Vector3(0.72, 0.58, 0.55)
-		var head := _mesh_node(enemy, SphereMesh.new(), hide_mat, Vector3(0, 1.25, -0.3), "EnemyHead")
-		head.scale = Vector3(0.48, 0.42, 0.52)
+		fur.scale = Vector3(1.18, 1.05, 0.92) if i == 4 else Vector3(0.72, 0.58, 0.55)
+		var head := _mesh_node(enemy, SphereMesh.new(), hide_mat, Vector3(0, 1.25 if i != 4 else 1.75, -0.3), "EnemyHead")
+		head.scale = Vector3(0.48, 0.42, 0.52) if i != 4 else Vector3(0.78, 0.7, 0.72)
 		for side in [-1.0, 1.0]:
 			var ear := _mesh_node(enemy, PrismMesh.new(), hide_mat, Vector3(side * 0.28, 1.65, -0.3), "Ear")
 			ear.scale = Vector3(0.32, 0.5, 0.25)
@@ -400,12 +410,28 @@ func _build_enemies() -> void:
 		for side in [-1.0, 1.0]:
 			var claw := _mesh_node(enemy, PrismMesh.new(), _mat(Color("#c6bca7"), 0.65), Vector3(side * 0.38, 0.12, -0.42), "PawClaw")
 			claw.scale = Vector3(0.07, 0.08, 0.16)
-		var eye_mat := _mat(Color("#ffbd76"), 0.3, 0.0)
+		var eye_color := Color("#8dfaff") if i == 4 else Color("#ffbd76")
+		var eye_mat := _mat(eye_color, 0.3, 0.0)
+		if i == 4:
+			eye_mat.emission_enabled = true
+			eye_mat.emission = eye_color
+			eye_mat.emission_energy_multiplier = 1.8
 		for side in [-1.0, 1.0]:
-			var eye := _mesh_node(enemy, SphereMesh.new(), eye_mat, Vector3(side * 0.17, 1.31, -0.73), "Eye")
-			eye.scale = Vector3(0.075, 0.07, 0.05)
+			var eye := _mesh_node(enemy, SphereMesh.new(), eye_mat, Vector3(side * (0.29 if i == 4 else 0.17), 1.81 if i == 4 else 1.31, -0.86 if i == 4 else -0.73), "Eye")
+			eye.scale = Vector3(0.13, 0.1, 0.07) if i == 4 else Vector3(0.075, 0.07, 0.05)
+		if i == 4:
+			for side in [-1.0, 1.0]:
+				var horn := _mesh_node(enemy, PrismMesh.new(), _mat(Color("#e2f6ee"), 0.3, 0.2), Vector3(side * 0.48, 2.42, -0.16), "FrostHorn")
+				horn.scale = Vector3(0.32, 0.82, 0.28)
+				horn.rotation.z = -side * 0.32
+			var core_mat := _mat(Color("#b3ffff"), 0.22, 0.3)
+			core_mat.emission_enabled = true
+			core_mat.emission = Color("#67e7f2")
+			core_mat.emission_energy_multiplier = 2.2
+			var core := _mesh_node(enemy, PrismMesh.new(), core_mat, Vector3(0, 1.12, -0.68), "FrostCore")
+			core.scale = Vector3(0.32, 0.42, 0.22)
 		enemies.append(enemy)
-		enemy_health[enemy] = 75 if i < 3 else 110
+		enemy_health[enemy] = 650 if i == 4 else (75 if i < 3 else 110)
 		enemy_hit_timers[enemy] = 0.0
 		enemy_base_colors[enemy] = hide_mat.albedo_color
 		_create_enemy_health_ui(enemy)
@@ -423,7 +449,11 @@ func _create_enemy_health_ui(enemy: Node3D) -> void:
 	fill.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var name_tag := Label3D.new()
 	name_tag.name = "EnemyName"
-	name_tag.text = "ASH WOLF" if enemy.name == "AshWolf" else "RUIN STALKER"
+	name_tag.text = "FROST WARDEN  •  ELITE" if enemy.name == "FrostWarden" else ("ASH WOLF" if enemy.name == "AshWolf" else "RUIN STALKER")
+	if enemy.name == "FrostWarden":
+		name_tag.modulate = Color("#9af5ff")
+		name_tag.font_size = 34
+		root.scale = Vector3(1.35, 1.35, 1.35)
 	name_tag.position = Vector3(0.0, 0.17, 0.0)
 	name_tag.font_size = 28
 	name_tag.pixel_size = 0.006
@@ -442,7 +472,7 @@ func _update_enemy_health_ui(enemy: Node3D) -> void:
 	var material := display.get("material") as StandardMaterial3D
 	if fill == null or material == null:
 		return
-	var max_hp := 110.0 if enemy.name == "RuinStalker" else 75.0
+	var max_hp := 650.0 if enemy.name == "FrostWarden" else (110.0 if enemy.name == "RuinStalker" else 75.0)
 	var ratio := clampf(float(enemy_health.get(enemy, max_hp)) / max_hp, 0.0, 1.0)
 	fill.scale.x = ratio
 	fill.position.x = -0.03 - 0.47 * (1.0 - ratio)
@@ -1015,7 +1045,15 @@ func _roll_enemy_loot(enemy: Node3D) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var gained: Array[String] = []
-	if enemy.name == "AshWolf":
+	if enemy.name == "FrostWarden":
+		inventory["Warden Emblem"] = int(inventory.get("Warden Emblem", 0)) + 2
+		inventory["Frost Sigil"] = int(inventory.get("Frost Sigil", 0)) + 1
+		inventory["Echo Fragment"] = int(inventory.get("Echo Fragment", 0)) + 4
+		inventory["Ruin Core"] = int(inventory.get("Ruin Core", 0)) + 3
+		gained.append_array(["Warden Emblem", "Frost Sigil", "Echo Fragment ×4", "Ruin Core ×3"])
+		coins += 300
+		_gain_xp(350)
+	elif enemy.name == "AshWolf":
 		if rng.randf() <= 0.48:
 			inventory["Ashen Pelt"] = int(inventory.get("Ashen Pelt", 0)) + 1
 			gained.append("Ashen Pelt")
@@ -1072,6 +1110,8 @@ func _refresh_progression_ui() -> void:
 		lines.append("WEAPON: 3 Shards + 2 Pelts + 35 coins")
 		lines.append("ARMOR: 3 Pelts + 2 Cores + 35 coins")
 		lines.append("ELITE DROP: Warden Emblem  •  25%")
+		lines.append("FROST WARDEN: every 3rd wave  •  650 HP")
+		lines.append("BOSS REWARD: Frost Sigil + 300 coins + 350 XP")
 		lines.append("")
 		lines.append("STORY QUEST")
 		lines.append(_quest_description())
