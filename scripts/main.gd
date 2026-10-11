@@ -379,10 +379,10 @@ func _handle_action_touch(screen_position: Vector2) -> void:
 		_try_dodge()
 
 func _class_button_center() -> Vector2:
-	return Vector2(390.0, 258.0)
+	return Vector2(390.0, 205.0)
 
 func _specialization_button_center() -> Vector2:
-	return Vector2(390.0, 316.0)
+	return Vector2(390.0, 255.0)
 
 func _current_class_data() -> Dictionary:
 	return CLASS_DATA[clampi(player_class_index, 0, CLASS_DATA.size() - 1)]
@@ -544,7 +544,7 @@ func _spend_talent(branch: int) -> void:
 	queue_redraw()
 
 func _talent_button_center(branch: int) -> Vector2:
-	return Vector2(260.0 + float(branch) * 145.0, 382.0)
+	return Vector2(270.0 + float(branch) * 145.0, 315.0)
 
 func _cycle_class() -> void:
 	player_class_index = (player_class_index + 1) % CLASS_DATA.size()
@@ -563,31 +563,31 @@ func _cycle_specialization() -> void:
 	queue_redraw()
 
 func _attack_button_center() -> Vector2:
-	return Vector2(WORLD_SIZE.x - 100.0, WORLD_SIZE.y - 110.0)
+	return Vector2(WORLD_SIZE.x - 96.0, WORLD_SIZE.y - 92.0)
 
 func _skill_button_center() -> Vector2:
-	return Vector2(WORLD_SIZE.x - 230.0, WORLD_SIZE.y - 110.0)
+	return Vector2(WORLD_SIZE.x - 215.0, WORLD_SIZE.y - 92.0)
 
 func _ultimate_button_center() -> Vector2:
-	return Vector2(WORLD_SIZE.x - 405.0, WORLD_SIZE.y - 230.0)
+	return Vector2(WORLD_SIZE.x - 330.0, WORLD_SIZE.y - 202.0)
 
 func _weapon_button_center() -> Vector2:
-	return Vector2(WORLD_SIZE.x - 490.0, WORLD_SIZE.y - 92.0)
+	return Vector2(WORLD_SIZE.x - 500.0, WORLD_SIZE.y - 76.0)
 
 func _armor_button_center() -> Vector2:
-	return Vector2(WORLD_SIZE.x - 350.0, WORLD_SIZE.y - 92.0)
+	return Vector2(WORLD_SIZE.x - 365.0, WORLD_SIZE.y - 76.0)
 
 func _potion_button_center() -> Vector2:
-	return Vector2(650.0, WORLD_SIZE.y - 92.0)
+	return Vector2(650.0, WORLD_SIZE.y - 76.0)
 
 func _forge_weapon_button_center() -> Vector2:
-	return Vector2(135.0, 220.0)
+	return Vector2(135.0, 165.0)
 
 func _forge_armor_button_center() -> Vector2:
-	return Vector2(295.0, 220.0)
+	return Vector2(295.0, 165.0)
 
 func _dodge_button_center() -> Vector2:
-	return Vector2(WORLD_SIZE.x - 220.0, WORLD_SIZE.y - 250.0)
+	return Vector2(WORLD_SIZE.x - 205.0, WORLD_SIZE.y - 205.0)
 
 func _try_dodge() -> void:
 	if dodge_cooldown > 0.0 or dodge_time > 0.0:
@@ -2249,7 +2249,7 @@ func _draw_hud() -> void:
 	var current_specs: Array = current_class["specs"]
 	draw_string(ThemeDB.fallback_font, spec_center + Vector2(-118, 4), "SPEC: %s  [G]" % String(current_specs[specialization_index]), HORIZONTAL_ALIGNMENT_LEFT, 240, 12, Color("#d7e8ed"))
 	var passive_data := _current_passive_data()
-	draw_string(ThemeDB.fallback_font, Vector2(390, 358), "PASSIVE: %s" % String(passive_data.get("name", "None")), HORIZONTAL_ALIGNMENT_CENTER, 360, 12, Color("#b8e8a0"))
+	draw_string(ThemeDB.fallback_font, Vector2(390, 350), "PASSIVE: %s" % String(passive_data.get("name", "None")), HORIZONTAL_ALIGNMENT_CENTER, 360, 12, Color("#b8e8a0"))
 	var talent_titles: Array[String] = ["OFFENSE", "DEFENSE", "UTILITY"]
 	for branch in range(3):
 		var talent_center := _talent_button_center(branch)
@@ -2258,12 +2258,12 @@ func _draw_hud() -> void:
 		draw_rect(Rect2(talent_center - Vector2(66, 22), Vector2(132, 44)), talent_color, false, 2.0)
 		draw_string(ThemeDB.fallback_font, talent_center + Vector2(-58, -2), "%s %d/5" % [talent_titles[branch], talent_ranks[branch]], HORIZONTAL_ALIGNMENT_LEFT, 120, 11, Color("#e7dfc8"))
 		draw_string(ThemeDB.fallback_font, talent_center + Vector2(-58, 14), "KEY %d" % (branch + 1), HORIZONTAL_ALIGNMENT_LEFT, 120, 9, Color("#d7c59f"))
-	draw_string(ThemeDB.fallback_font, Vector2(390, 438), "TALENT POINTS: %d" % talent_points, HORIZONTAL_ALIGNMENT_CENTER, 300, 13, Color("#b8e8a0") if talent_points > 0 else Color("#c5cfba"))
+	draw_string(ThemeDB.fallback_font, Vector2(390, 390), "TALENT POINTS: %d" % talent_points, HORIZONTAL_ALIGNMENT_CENTER, 300, 13, Color("#b8e8a0") if talent_points > 0 else Color("#c5cfba"))
 	var set_bonus := _current_equipment_set_bonus()
 	var legendary_affix := _current_legendary_affix()
 	var set_color := Color("#ffd28b") if weapon_enchant >= 4 and armor_enchant >= 4 else (Color("#b8e8a0") if weapon_enchant >= 2 and armor_enchant >= 2 else Color("#c5cfba"))
-	draw_string(ThemeDB.fallback_font, Vector2(390, 460), "SET: %s  •  DMG +%d%%  •  ARMOR +%d  •  CRIT +%d%%" % [String(set_bonus["name"]), int(round((float(set_bonus["damage"]) - 1.0) * 100.0)), int(set_bonus["armor"]), int(round(float(set_bonus["crit"]) * 100.0))], HORIZONTAL_ALIGNMENT_CENTER, 480, 11, set_color)
-	draw_string(ThemeDB.fallback_font, Vector2(390, 480), "LEGENDARY: %s  •  DMG +%d%%  •  SKILL +%d%%  •  ARMOR +%d" % [String(legendary_affix["name"]), int(round((float(legendary_affix["damage"]) - 1.0) * 100.0)), int(round((float(legendary_affix["skill"]) - 1.0) * 100.0)), int(legendary_affix["armor"])], HORIZONTAL_ALIGNMENT_CENTER, 480, 10, Color("#ffd28b") if weapon_enchant >= 4 or armor_enchant >= 4 else Color("#c5cfba"))
+	draw_string(ThemeDB.fallback_font, Vector2(390, 412), "SET: %s  •  DMG +%d%%  •  ARMOR +%d  •  CRIT +%d%%" % [String(set_bonus["name"]), int(round((float(set_bonus["damage"]) - 1.0) * 100.0)), int(set_bonus["armor"]), int(round(float(set_bonus["crit"]) * 100.0))], HORIZONTAL_ALIGNMENT_CENTER, 480, 11, set_color)
+	draw_string(ThemeDB.fallback_font, Vector2(390, 432), "LEGENDARY: %s  •  DMG +%d%%  •  SKILL +%d%%  •  ARMOR +%d" % [String(legendary_affix["name"]), int(round((float(legendary_affix["damage"]) - 1.0) * 100.0)), int(round((float(legendary_affix["skill"]) - 1.0) * 100.0)), int(legendary_affix["armor"])], HORIZONTAL_ALIGNMENT_CENTER, 480, 10, Color("#ffd28b") if weapon_enchant >= 4 or armor_enchant >= 4 else Color("#c5cfba"))
 	var forge_weapon_center := _forge_weapon_button_center()
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color(0.16, 0.13, 0.09, 0.92))
 	draw_rect(Rect2(forge_weapon_center - Vector2(67, 23), Vector2(134, 46)), Color("#c49a62"), false, 2.0)
