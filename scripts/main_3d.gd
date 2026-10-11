@@ -516,7 +516,7 @@ func _build_hud() -> void:
 	_add_action_button(layer, "SKILL", Vector2(-238, -92), Vector2(88, 88), Color("#3d6c83"), _skill)
 	_add_action_button(layer, "DODGE", Vector2(-205, -205), Vector2(76, 76), Color("#367780"), _dodge)
 	_add_action_button(layer, "ULT", Vector2(-326, -142), Vector2(80, 80), Color("#9b783d"), _ultimate)
-	_add_action_button(layer, "BAG", Vector2(-86, 34), Vector2(76, 46), Color("#746347"), _toggle_inventory)
+	_add_action_button(layer, "BAG", Vector2(-86, -340), Vector2(76, 46), Color("#746347"), _toggle_inventory)
 	inventory_panel = PanelContainer.new()
 	inventory_panel.name = "InventoryPanel"
 	inventory_panel.position = Vector2(340, 120)
