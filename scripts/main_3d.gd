@@ -38,6 +38,7 @@ var attack_anim_time := 0.0
 const ATTACK_ANIM_DURATION := 0.62
 const ENEMY_HIT_REACTION_DURATION := 0.24
 var animation_time := 0.0
+var magical_materials: Array[StandardMaterial3D] = []
 
 func _ready() -> void:
 	_build_environment()
@@ -62,7 +63,11 @@ func _build_environment() -> void:
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color("#8ba69a")
-	env.ambient_light_energy = 0.55
+	env.ambient_light_energy = 0.62
+	env.fog_enabled = true
+	env.fog_light_color = Color("#74877c")
+	env.fog_density = 0.006
+	env.fog_sky_affect = 0.18
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	world_env.environment = env
 	add_child(world_env)
@@ -70,11 +75,11 @@ func _build_environment() -> void:
 	sun.name = "LateAfternoonSun"
 	sun.rotation_degrees = Vector3(-48, -32, 0)
 	sun.light_color = Color("#ffe0b0")
-	sun.light_energy = 0.95
+	sun.light_energy = 0.86
+	sun.light_color = Color("#ffddb0")
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	sun.directional_shadow_max_distance = 42.0
-	sun.directional_shadow_max_distance = 65.0
 	add_child(sun)
 
 func _mat(color: Color, roughness: float = 0.9, metallic: float = 0.0) -> StandardMaterial3D:
@@ -195,6 +200,39 @@ func _build_world() -> void:
 			moss_patch.scale = Vector3(0.2, 0.045, 0.16)
 			moss_patch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_build_ruins()
+	_build_magic_accents()
+
+func _build_magic_accents() -> void:
+	# Emissive geometry gives the ruins a readable magical focal point without extra dynamic lights.
+	var crystal_positions: Array[Vector3] = [Vector3(-5.2, 0.0, -13.0), Vector3(5.2, 0.0, -13.0), Vector3(0.0, 0.0, -19.0)]
+	var crystal_colors: Array[Color] = [Color("#61d9d2"), Color("#8c9dff"), Color("#77f0cf")]
+	for i in range(crystal_positions.size()):
+		var glow_mat := _mat(crystal_colors[i], 0.28, 0.18)
+		glow_mat.emission_enabled = true
+		glow_mat.emission = crystal_colors[i]
+		glow_mat.emission_energy_multiplier = 1.25
+		magical_materials.append(glow_mat)
+		var crystal_mesh := PrismMesh.new()
+		var crystal := _mesh_node(self, crystal_mesh, glow_mat, crystal_positions[i] + Vector3(0.0, 0.62, 0.0), "ShatteredReachCrystal")
+		crystal.scale = Vector3(0.34, 0.82, 0.34) if i != 1 else Vector3(0.28, 0.65, 0.28)
+		crystal.rotation.y = float(i) * 1.1
+		crystal.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var base_mat := _mat(Color("#344e4c"), 0.85, 0.12)
+		var base := _mesh_node(self, CylinderMesh.new(), base_mat, crystal_positions[i] + Vector3(0.0, 0.13, 0.0), "CrystalSocket")
+		base.scale = Vector3(0.72, 0.18, 0.72)
+		base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Short, flat rune strokes around the old foundation; no particles or extra light sources.
+	var rune_color := Color("#69d8ce")
+	var rune_mat := _mat(rune_color, 0.5, 0.1)
+	rune_mat.emission_enabled = true
+	rune_mat.emission = rune_color
+	rune_mat.emission_energy_multiplier = 0.8
+	magical_materials.append(rune_mat)
+	for i in range(8):
+		var angle := TAU * float(i) / 8.0
+		var rune := _box(self, Vector3(0.48, 0.035, 0.09), rune_mat, Vector3(cos(angle) * 7.2, 0.17, -14.0 + sin(angle) * 2.0), "AncientRune")
+		rune.rotation.y = -angle * 0.5
+		rune.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 func _build_ruins() -> void:
 	var stone := _mat(Color("#6d7068"), 0.85)
@@ -443,6 +481,9 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	world_time += delta
 	animation_time += delta
+	for i in range(magical_materials.size()):
+		var pulse := 0.88 + 0.22 * sin(animation_time * 1.35 + float(i) * 0.7)
+		magical_materials[i].emission_energy_multiplier = pulse * (1.25 if i < 3 else 0.8)
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	skill_cooldown = maxf(0.0, skill_cooldown - delta)
 	attack_flash = maxf(0.0, attack_flash - delta)
