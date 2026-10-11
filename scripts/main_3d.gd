@@ -23,13 +23,14 @@ var xp_to_next_level := 190
 var stats_label: Label
 var inventory_label: Label
 var inventory_panel: PanelContainer
-var inventory: Dictionary = {"Ashen Pelt": 0, "Ancient Shard": 0, "Echo Fragment": 0, "Ruin Core": 0}
+var inventory: Dictionary = {"Ashen Pelt": 0, "Ancient Shard": 0, "Echo Fragment": 0, "Ruin Core": 0, "Warden Emblem": 0, "Frost Sigil": 0}
 var codex_discoveries: Array[String] = []
 var weapon_level := 0
 var armor_level := 0
 var quest_stage := 0
 var quest_stage_progress := 0
 var quest_completed := false
+var wave_respawn_timer := -1.0
 var enemies: Array[Node3D] = []
 var hp_bar: ProgressBar
 var status_label: Label
@@ -338,6 +339,37 @@ func _build_player() -> void:
 	camera.position = Vector3(0, 4.8, 7.4)
 	camera.rotation = Vector3(deg_to_rad(-25), 0, 0)
 	camera.fov = 62.0
+	_refresh_equipment_visuals()
+
+func _refresh_equipment_visuals() -> void:
+	if player == null:
+		return
+	var blade := player.get_node_or_null("Longsword") as MeshInstance3D
+	if blade != null:
+		var blade_mat := _mat(Color("#d8e0d5") if weapon_level < 2 else (Color("#83e8e0") if weapon_level < 4 else Color("#ffd28b")), 0.22, 0.9)
+		if weapon_level >= 3:
+			blade_mat.emission_enabled = true
+			blade_mat.emission = Color("#5bded0") if weapon_level < 5 else Color("#ffb84f")
+			blade_mat.emission_energy_multiplier = 1.1 + float(weapon_level - 2) * 0.35
+		blade.material_override = blade_mat
+	var breastplate := player.get_node_or_null("LayeredBreastplate") as MeshInstance3D
+	if breastplate != null:
+		breastplate.material_override = _mat(Color("#283c42") if armor_level < 2 else (Color("#477b78") if armor_level < 4 else Color("#a17a43")), 0.38, 0.48)
+	var cape := player.get_node_or_null("WardenCape") as MeshInstance3D
+	if cape != null:
+		cape.material_override = _mat(Color("#263b43") if armor_level < 3 else (Color("#275c57") if armor_level < 5 else Color("#6d4328")), 0.7, 0.18)
+	var crest := player.get_node_or_null("EquipmentCrest") as MeshInstance3D
+	if crest == null and armor_level >= 2:
+		crest = _mesh_node(player, PrismMesh.new(), _mat(Color("#c9a15b"), 0.3, 0.75), Vector3(0, 1.78, -0.43), "EquipmentCrest")
+		crest.scale = Vector3(0.24, 0.32, 0.12)
+	if crest != null:
+		crest.visible = armor_level >= 2
+	var shoulder_runes := player.get_node_or_null("ShoulderRunes") as MeshInstance3D
+	if shoulder_runes == null and armor_level >= 4:
+		shoulder_runes = _mesh_node(player, SphereMesh.new(), _mat(Color("#83e8e0"), 0.25, 0.4), Vector3(0, 1.56, 0.02), "ShoulderRunes")
+		shoulder_runes.scale = Vector3(0.72, 0.16, 0.42)
+	if shoulder_runes != null:
+		shoulder_runes.visible = armor_level >= 4
 
 func _build_enemies() -> void:
 	var positions := [Vector3(4, 0, -4), Vector3(-5, 0, -10), Vector3(8, 0, -17), Vector3(-9, 0, -20)]
@@ -631,6 +663,13 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	world_time += delta
 	animation_time += delta
+	if wave_respawn_timer >= 0.0:
+		wave_respawn_timer -= delta
+		if wave_respawn_timer <= 0.0 and enemies.is_empty():
+			wave_respawn_timer = -1.0
+			_build_enemies()
+			if status_label != null:
+				status_label.text = "NEW WAVE  •  ASH WOLVES AND RUIN STALKERS RETURN"
 	for i in range(magical_materials.size()):
 		var pulse := 0.88 + 0.22 * sin(animation_time * 1.35 + float(i) * 0.7)
 		magical_materials[i].emission_energy_multiplier = pulse * (1.25 if i < 3 else 0.8)
@@ -941,6 +980,8 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	_spawn_combat_effect("death", enemy.position + Vector3(0.0, 0.04, 0.0))
 	enemy.queue_free()
 	_roll_enemy_loot(enemy)
+	if enemies.is_empty():
+		wave_respawn_timer = 7.0
 	_gain_xp(12)
 	_save_progress()
 	if target_label != null:
@@ -987,6 +1028,9 @@ func _roll_enemy_loot(enemy: Node3D) -> void:
 		if rng.randf() <= 0.28:
 			inventory["Ruin Core"] = int(inventory.get("Ruin Core", 0)) + 1
 			gained.append("Ruin Core")
+		if enemy.name == "RuinStalker" and rng.randf() <= 0.25:
+			inventory["Warden Emblem"] = int(inventory.get("Warden Emblem", 0)) + 1
+			gained.append("Warden Emblem")
 	if not gained.is_empty():
 		status_label.text = "LOOT FOUND  •  " + ", ".join(gained)
 		if "Echo Fragment" in gained and not codex_discoveries.has("Echoes of Shattered Reach"):
@@ -1019,7 +1063,7 @@ func _refresh_progression_ui() -> void:
 		stats_label.text = "HP %d/%d    LV. %d    XP %d/%d    COINS %d" % [player_hp, player_max_hp, player_level, xp, xp_to_next_level, coins]
 	if inventory_label != null:
 		var lines: Array[String] = []
-		for item_name in ["Ashen Pelt", "Ancient Shard", "Echo Fragment", "Ruin Core"]:
+		for item_name in ["Ashen Pelt", "Ancient Shard", "Echo Fragment", "Ruin Core", "Warden Emblem", "Frost Sigil"]:
 			lines.append("%s  × %d" % [item_name, int(inventory.get(item_name, 0))])
 		lines.append("")
 		lines.append("EQUIPMENT")
@@ -1027,6 +1071,7 @@ func _refresh_progression_ui() -> void:
 		lines.append("Ruin Armor  Lv.%d  •  +%d max HP" % [armor_level, armor_level * 18])
 		lines.append("WEAPON: 3 Shards + 2 Pelts + 35 coins")
 		lines.append("ARMOR: 3 Pelts + 2 Cores + 35 coins")
+		lines.append("ELITE DROP: Warden Emblem  •  25%")
 		lines.append("")
 		lines.append("STORY QUEST")
 		lines.append(_quest_description())
@@ -1067,6 +1112,7 @@ func _craft_armor() -> void:
 	armor_level += 1
 	player_max_hp = 148 + armor_level * 18
 	player_hp = mini(player_max_hp, player_hp + 18)
+	_refresh_equipment_visuals()
 	status_label.text = "RUIN ARMOR EQUIPPED  •  LEVEL %d  •  +%d MAX HP" % [armor_level, armor_level * 18]
 	_refresh_progression_ui()
 	_save_progress()
@@ -1079,8 +1125,10 @@ func _quest_description() -> String:
 			return "II. WOLF PELTS  •  COLLECT 3 PELTS  (%d/3)" % mini(quest_stage_progress, 3)
 		2:
 			return "III. RUIN HEARTS  •  COLLECT 2 CORES  (%d/2)" % mini(quest_stage_progress, 2)
+		3:
+			return "IV. WARDEN'S MARK  •  FIND 1 EMBLEM  (%d/1)" % mini(quest_stage_progress, 1)
 		_:
-			return "STORY QUEST COMPLETE  •  REWARDS CLAIMED"
+			return "STORY QUEST COMPLETE  •  FROST SIGIL CLAIMED"
 
 func _advance_quest(gained: Array[String]) -> void:
 	if quest_completed:
@@ -1104,11 +1152,16 @@ func _advance_quest(gained: Array[String]) -> void:
 			if quest_stage_progress >= 2:
 				quest_stage = 3
 				quest_stage_progress = 0
-				quest_completed = true
-				coins += 150
-				inventory["Echo Fragment"] = int(inventory.get("Echo Fragment", 0)) + 2
-				_gain_xp(120)
-				status_label.text = "STORY QUEST COMPLETE  •  +120 XP  +150 COINS  +2 ECHO FRAGMENTS"
+				status_label.text = "QUEST UPDATED  •  HUNT RUIN STALKERS FOR A WARDEN EMBLEM"
+	elif quest_stage == 3 and gained.has("Warden Emblem"):
+		quest_stage = 4
+		quest_stage_progress = 0
+		quest_completed = true
+		coins += 250
+		inventory["Frost Sigil"] = int(inventory.get("Frost Sigil", 0)) + 1
+		inventory["Echo Fragment"] = int(inventory.get("Echo Fragment", 0)) + 3
+		_gain_xp(220)
+		status_label.text = "QUEST COMPLETE  •  FROST SIGIL +220 XP +250 COINS +3 ECHOES"
 	_refresh_progression_ui()
 
 func _save_progress() -> void:
@@ -1140,7 +1193,7 @@ func _load_progress() -> void:
 			inventory[item_name] = int(saved_inventory.get(item_name, inventory[item_name]))
 	weapon_level = clampi(int(save.get_value("equipment", "weapon_level", weapon_level)), 0, 5)
 	armor_level = clampi(int(save.get_value("equipment", "armor_level", armor_level)), 0, 5)
-	quest_stage = clampi(int(save.get_value("quest", "stage", quest_stage)), 0, 3)
+	quest_stage = clampi(int(save.get_value("quest", "stage", quest_stage)), 0, 4)
 	quest_stage_progress = maxi(0, int(save.get_value("quest", "progress", quest_stage_progress)))
 	quest_completed = bool(save.get_value("quest", "completed", quest_completed))
 	player_max_hp = 148 + armor_level * 18
