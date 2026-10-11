@@ -24,6 +24,9 @@ var status_label: Label
 var target_label: Label
 var world_time := 0.0
 var attack_flash := 0.0
+var animated_arms: Array[Node3D] = []
+var animated_legs: Array[Node3D] = []
+var animation_time := 0.0
 
 func _ready() -> void:
 	_build_environment()
@@ -177,11 +180,21 @@ func _build_player() -> void:
 	var helmet := _mesh_node(player, SphereMesh.new(), dark_armor, Vector3(0, 2.25, 0), "Helmet")
 	helmet.scale = Vector3(0.43, 0.28, 0.4)
 	_box(player, Vector3(0.95, 0.18, 0.72), gold, Vector3(0, 1.55, -0.02), "ChestTrim")
+	_box(player, Vector3(0.78, 0.42, 0.12), dark_armor, Vector3(0, 1.22, -0.37), "LayeredBreastplate")
+	_box(player, Vector3(0.72, 0.12, 0.68), gold, Vector3(0, 0.83, 0), "WarriorBelt")
+	var cape := _mesh_node(player, PrismMesh.new(), _mat(Color("#263b43"), 0.82, 0.1), Vector3(0, 1.12, 0.42), "WardenCape")
+	cape.scale = Vector3(0.7, 0.92, 0.18)
 	for side in [-1.0, 1.0]:
+		var shoulder := _mesh_node(player, SphereMesh.new(), gold, Vector3(side * 0.58, 1.55, 0), "ShoulderGuard")
+		shoulder.scale = Vector3(0.34, 0.25, 0.32)
 		var arm := _mesh_node(player, CapsuleMesh.new(), dark_armor, Vector3(side * 0.58, 1.18, 0), "Arm")
 		arm.scale = Vector3(0.22, 0.55, 0.24)
+		animated_arms.append(arm)
 		var leg := _mesh_node(player, CapsuleMesh.new(), dark_armor, Vector3(side * 0.25, 0.43, 0), "Leg")
 		leg.scale = Vector3(0.24, 0.52, 0.27)
+		animated_legs.append(leg)
+		var boot := _mesh_node(player, BoxMesh.new(), _mat(Color("#171f25"), 0.7, 0.25), Vector3(side * 0.25, 0.13, -0.08), "ArmoredBoot")
+		boot.scale = Vector3(0.34, 0.23, 0.52)
 	var sword := _box(player, Vector3(0.13, 1.45, 0.18), _mat(Color("#d8e0d5"), 0.24, 0.85), Vector3(0.82, 1.25, -0.1), "Longsword")
 	sword.rotation.z = -0.28
 	_box(player, Vector3(0.42, 0.12, 0.22), gold, Vector3(0.79, 0.62, -0.1), "SwordGuard")
@@ -210,6 +223,13 @@ func _build_enemies() -> void:
 		for side in [-1.0, 1.0]:
 			var ear := _mesh_node(enemy, PrismMesh.new(), hide_mat, Vector3(side * 0.28, 1.65, -0.3), "Ear")
 			ear.scale = Vector3(0.32, 0.5, 0.25)
+		for side in [-1.0, 1.0]:
+			for fore_aft in [-1.0, 1.0]:
+				var paw := _mesh_node(enemy, CapsuleMesh.new(), hide_mat, Vector3(side * 0.38, 0.28, fore_aft * 0.32), "WolfPaw")
+				paw.scale = Vector3(0.18, 0.42, 0.18)
+		var tail := _mesh_node(enemy, CapsuleMesh.new(), hide_mat, Vector3(0, 0.88, 0.5), "WolfTail")
+		tail.rotation.x = -0.8
+		tail.scale = Vector3(0.13, 0.42, 0.13)
 		var eye_mat := _mat(Color("#ffbd76"), 0.3, 0.0)
 		for side in [-1.0, 1.0]:
 			var eye := _mesh_node(enemy, SphereMesh.new(), eye_mat, Vector3(side * 0.17, 1.31, -0.73), "Eye")
@@ -338,6 +358,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	world_time += delta
+	animation_time += delta
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	skill_cooldown = maxf(0.0, skill_cooldown - delta)
 	attack_flash = maxf(0.0, attack_flash - delta)
@@ -347,6 +368,12 @@ func _process(delta: float) -> void:
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): input_dir.x -= 1.0
 	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): input_dir.x += 1.0
 	if input_dir.length_squared() > 1.0: input_dir = input_dir.normalized()
+	var walking := input_dir.length_squared() > 0.01
+	var gait := sin(animation_time * 9.0) * (0.62 if walking else 0.035)
+	for i in range(animated_arms.size()):
+		animated_arms[i].rotation.x = -gait * (1.0 if i == 0 else -1.0) - attack_flash * 2.2
+	for i in range(animated_legs.size()):
+		animated_legs[i].rotation.x = gait * (1.0 if i == 0 else -1.0)
 	if input_dir.length_squared() > 0.01:
 		var direction := Vector3(input_dir.x, 0, input_dir.y)
 		player.position += direction * MOVE_SPEED * delta
