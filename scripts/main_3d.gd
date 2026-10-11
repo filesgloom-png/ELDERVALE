@@ -33,6 +33,7 @@ var enemy_hit_timers: Dictionary = {}
 var enemy_base_colors: Dictionary = {}
 var enemy_health_ui: Dictionary = {}
 var enemy_knockback: Dictionary = {}
+var enemy_recovery_animations: Dictionary = {}
 var health_bar_fade_effects: Array[Dictionary] = []
 var damage_number_effects: Array[Dictionary] = []
 var animated_sword: Node3D
@@ -639,6 +640,29 @@ func _process(delta: float) -> void:
 			enemy_knockback[enemy] = knockback.move_toward(Vector3.ZERO, 17.0 * delta)
 		else:
 			enemy_knockback.erase(enemy)
+		if enemy_recovery_animations.has(enemy):
+			var recovery: Dictionary = enemy_recovery_animations[enemy]
+			var recovery_age := float(recovery.get("age", 0.0)) + delta
+			var recovery_duration := float(recovery.get("duration", 0.32))
+			var recovery_progress := clampf(recovery_age / recovery_duration, 0.0, 1.0)
+			var recovery_pulse := sin(recovery_progress * PI)
+			var recovery_body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
+			var recovery_head := enemy.get_node_or_null("EnemyHead") as MeshInstance3D
+			if recovery_body != null:
+				var base_body_scale: Vector3 = recovery.get("body_scale", Vector3(0.72, 0.58, 0.55))
+				recovery_body.scale = base_body_scale + Vector3(0.06, -0.10, 0.08) * recovery_pulse
+			if recovery_head != null:
+				var base_head_position: Vector3 = recovery.get("head_position", Vector3(0.0, 1.25, -0.3))
+				recovery_head.position = base_head_position + Vector3(0.0, -0.07, 0.04) * recovery_pulse
+			if recovery_age >= recovery_duration:
+				if recovery_body != null:
+					recovery_body.scale = recovery.get("body_scale", Vector3(0.72, 0.58, 0.55))
+				if recovery_head != null:
+					recovery_head.position = recovery.get("head_position", Vector3(0.0, 1.25, -0.3))
+				enemy_recovery_animations.erase(enemy)
+			else:
+				recovery["age"] = recovery_age
+				enemy_recovery_animations[enemy] = recovery
 		enemy.rotation.z = lerpf(enemy.rotation.z, 0.0, minf(1.0, delta * 12.0))
 		if enemy_health_ui.has(enemy):
 			var display: Dictionary = enemy_health_ui[enemy]
@@ -800,12 +824,19 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	enemy_health[enemy] = remaining_hp
 	_spawn_damage_number(enemy, damage)
 	_update_enemy_health_ui(enemy)
-	# Stronger readable impact: brief flash, stagger, and a damped physical-looking shove.
+	# The impact flash and squash pulse share one short recovery window.
 	var body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
+	var head := enemy.get_node_or_null("EnemyHead") as MeshInstance3D
 	if body != null:
 		var flash_material := body.material_override as StandardMaterial3D
 		if flash_material != null:
 			flash_material.albedo_color = Color("#ffd0ad")
+		enemy_recovery_animations[enemy] = {
+			"age": 0.0,
+			"duration": 0.32,
+			"body_scale": body.scale,
+			"head_position": head.position if head != null else Vector3(0.0, 1.25, -0.3)
+		}
 	enemy_hit_timers[enemy] = ENEMY_HIT_REACTION_DURATION
 	_spawn_combat_effect("hit", enemy.position + Vector3(0.0, 0.9, 0.0))
 	var recoil := enemy.global_position - player.global_position
@@ -823,6 +854,7 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	enemy_health.erase(enemy)
 	enemy_hit_timers.erase(enemy)
 	enemy_knockback.erase(enemy)
+	enemy_recovery_animations.erase(enemy)
 	enemy_base_colors.erase(enemy)
 	if enemy_health_ui.has(enemy):
 		var display: Dictionary = enemy_health_ui[enemy]
