@@ -39,6 +39,7 @@ const ATTACK_ANIM_DURATION := 0.62
 const ENEMY_HIT_REACTION_DURATION := 0.24
 var animation_time := 0.0
 var magical_materials: Array[StandardMaterial3D] = []
+var combat_effects: Array[Dictionary] = []
 
 func _ready() -> void:
 	_build_environment()
@@ -484,6 +485,7 @@ func _process(delta: float) -> void:
 	for i in range(magical_materials.size()):
 		var pulse := 0.88 + 0.22 * sin(animation_time * 1.35 + float(i) * 0.7)
 		magical_materials[i].emission_energy_multiplier = pulse * (1.25 if i < 3 else 0.8)
+	_update_combat_effects(delta)
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	skill_cooldown = maxf(0.0, skill_cooldown - delta)
 	attack_flash = maxf(0.0, attack_flash - delta)
@@ -551,6 +553,73 @@ func _process(delta: float) -> void:
 	if status_label != null:
 		status_label.text = ("ATTACK READY" if attack_cooldown <= 0 else "ATTACK  %.1fs" % attack_cooldown) + "     •     " + ("SKILL READY" if skill_cooldown <= 0 else "SKILL  %.1fs" % skill_cooldown)
 
+func _spawn_combat_effect(kind: String) -> void:
+	if player == null:
+		return
+	# Short-lived emissive meshes only: no particles and no extra dynamic lights.
+	var effect_root := Node3D.new()
+	effect_root.name = "CombatFX_" + kind
+	effect_root.position = player.position + Vector3(0.0, 0.04, 0.0)
+	effect_root.rotation.y = player.rotation.y
+	add_child(effect_root)
+	var tint := Color("#c8f5ff") if kind == "slash" else (Color("#70e7ff") if kind == "cleave" else Color("#ffd58a"))
+	var glow := _mat(tint, 0.3, 0.25)
+	glow.emission_enabled = true
+	glow.emission = tint
+	glow.emission_energy_multiplier = 1.65 if kind != "oath" else 2.0
+	if kind == "slash":
+		for i in range(3):
+			var streak := _box(effect_root, Vector3(0.12, 0.07, 1.35), glow, Vector3(-0.55 + float(i) * 0.55, 1.18, -1.1 - absf(float(i) - 1.0) * 0.18), "SwordArcStreak")
+			streak.rotation.y = (float(i) - 1.0) * 0.24
+			streak.rotation.x = -0.12
+			streak.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	elif kind == "cleave":
+		for i in range(5):
+			var streak := _box(effect_root, Vector3(0.16, 0.09, 2.05), glow, Vector3(-1.15 + float(i) * 0.575, 1.0, -1.55 - absf(float(i) - 2.0) * 0.12), "CleaveArcStreak")
+			streak.rotation.y = (float(i) - 2.0) * 0.19
+			streak.rotation.x = -0.18
+			streak.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	else:
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 1.35
+		ring_mesh.outer_radius = 1.52
+		ring_mesh.rings = 6
+		ring_mesh.ring_segments = 16
+		var ring := _mesh_node(effect_root, ring_mesh, glow, Vector3(0.0, 0.12, 0.0), "OathGroundRing")
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		for i in range(4):
+			var beam := _box(effect_root, Vector3(0.12, 2.2, 0.12), glow, Vector3(cos(float(i) * TAU / 4.0) * 1.35, 1.1, sin(float(i) * TAU / 4.0) * 1.35), "OathRuneBeam")
+			beam.rotation.y = float(i) * TAU / 4.0
+			beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	combat_effects.append({"root": effect_root, "age": 0.0, "duration": 0.34 if kind == "slash" else (0.48 if kind == "cleave" else 0.72), "kind": kind})
+
+func _update_combat_effects(delta: float) -> void:
+	for i in range(combat_effects.size() - 1, -1, -1):
+		var fx: Dictionary = combat_effects[i]
+		var root := fx.get("root") as Node3D
+		if not is_instance_valid(root):
+			combat_effects.remove_at(i)
+			continue
+		var age := float(fx.get("age", 0.0)) + delta
+		var duration := float(fx.get("duration", 0.4))
+		var progress := clampf(age / duration, 0.0, 1.0)
+		fx["age"] = age
+		combat_effects[i] = fx
+		if age >= duration:
+			root.queue_free()
+			combat_effects.remove_at(i)
+			continue
+		var kind := str(fx.get("kind", "slash"))
+		if kind == "slash":
+			root.scale = Vector3.ONE * (0.82 + progress * 0.42)
+			root.rotation.y += delta * 0.75
+		elif kind == "cleave":
+			root.scale = Vector3(0.75 + progress * 0.7, 0.9, 0.8 + progress * 0.65)
+			root.rotation.y += delta * 0.42
+		else:
+			root.scale = Vector3.ONE * (0.55 + progress * 1.25)
+			root.rotation.y += delta * 0.55
+
 func _nearest_enemy() -> Node3D:
 	var best: Node3D = null
 	var best_distance := 4.8
@@ -564,6 +633,7 @@ func _nearest_enemy() -> Node3D:
 
 func _attack() -> void:
 	if attack_cooldown > 0.0: return
+	_spawn_combat_effect("slash")
 	attack_cooldown = 0.48
 	var target := _nearest_enemy()
 	if target != null:
@@ -576,6 +646,7 @@ func _attack() -> void:
 
 func _skill() -> void:
 	if skill_cooldown > 0.0: return
+	_spawn_combat_effect("cleave")
 	skill_cooldown = 4.0
 	var target := _nearest_enemy()
 	if target != null:
@@ -636,6 +707,7 @@ func _dodge() -> void:
 	status_label.text = "EVASIVE STEP"
 
 func _ultimate() -> void:
+	_spawn_combat_effect("oath")
 	var target := _nearest_enemy()
 	if target != null:
 		_damage_enemy(target, 90)
