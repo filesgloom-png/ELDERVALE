@@ -989,11 +989,11 @@ func _roll_enemy_loot(enemy: Node3D) -> void:
 			gained.append("Ruin Core")
 	if not gained.is_empty():
 		status_label.text = "LOOT FOUND  •  " + ", ".join(gained)
-	_advance_quest(gained)
-	_save_progress()
 		if "Echo Fragment" in gained and not codex_discoveries.has("Echoes of Shattered Reach"):
 			codex_discoveries.append("Echoes of Shattered Reach")
 			status_label.text = "CODEX DISCOVERY  •  ECHOES OF SHATTERED REACH"
+	_advance_quest(gained)
+	_save_progress()
 
 func _gain_xp(amount: int) -> void:
 	xp += amount
