@@ -18,6 +18,13 @@ var player_max_hp := 148
 var xp := 178
 var coins := 164
 var kills := 0
+var player_level := 5
+var xp_to_next_level := 190
+var stats_label: Label
+var inventory_label: Label
+var inventory_panel: PanelContainer
+var inventory: Dictionary = {"Ashen Pelt": 0, "Ancient Shard": 0, "Echo Fragment": 0, "Ruin Core": 0}
+var codex_discoveries: Array[String] = []
 var enemies: Array[Node3D] = []
 var hp_bar: ProgressBar
 var status_label: Label
@@ -47,6 +54,7 @@ var magical_materials: Array[StandardMaterial3D] = []
 var combat_effects: Array[Dictionary] = []
 
 func _ready() -> void:
+	_load_progress()
 	_build_environment()
 	_build_world()
 	_build_player()
@@ -485,11 +493,11 @@ func _build_hud() -> void:
 	hp_bar.add_theme_stylebox_override("background", _hud_bar_style(Color("#352c2a")))
 	hp_bar.add_theme_stylebox_override("fill", _hud_bar_style(Color("#b84d46")))
 	stack.add_child(hp_bar)
-	var stats := Label.new()
-	stats.text = "HP 148/148    XP 178/190    COINS 164"
-	stats.add_theme_font_size_override("font_size", 12)
-	stats.add_theme_color_override("font_color", Color("#e0d0ad"))
-	stack.add_child(stats)
+	stats_label = Label.new()
+	stats_label.name = "ProgressionStats"
+	stats_label.add_theme_font_size_override("font_size", 12)
+	stats_label.add_theme_color_override("font_color", Color("#e0d0ad"))
+	stack.add_child(stats_label)
 	status_label = Label.new()
 	status_label.position = Vector2(410, 20)
 	status_label.size = Vector2(460, 36)
@@ -508,6 +516,38 @@ func _build_hud() -> void:
 	_add_action_button(layer, "SKILL", Vector2(-238, -92), Vector2(88, 88), Color("#3d6c83"), _skill)
 	_add_action_button(layer, "DODGE", Vector2(-205, -205), Vector2(76, 76), Color("#367780"), _dodge)
 	_add_action_button(layer, "ULT", Vector2(-326, -142), Vector2(80, 80), Color("#9b783d"), _ultimate)
+	_add_action_button(layer, "BAG", Vector2(-86, 34), Vector2(76, 46), Color("#746347"), _toggle_inventory)
+	inventory_panel = PanelContainer.new()
+	inventory_panel.name = "InventoryPanel"
+	inventory_panel.position = Vector2(340, 120)
+	inventory_panel.custom_minimum_size = Vector2(330, 300)
+	inventory_panel.visible = false
+	var inventory_style := StyleBoxFlat.new()
+	inventory_style.bg_color = Color(0.035, 0.055, 0.05, 0.96)
+	inventory_style.border_color = Color("#b99a65")
+	inventory_style.set_border_width_all(2)
+	inventory_style.set_corner_radius_all(8)
+	inventory_panel.add_theme_stylebox_override("panel", inventory_style)
+	layer.add_child(inventory_panel)
+	var inventory_stack := VBoxContainer.new()
+	inventory_stack.add_theme_constant_override("separation", 8)
+	inventory_panel.add_child(inventory_stack)
+	var inventory_title := Label.new()
+	inventory_title.text = "FIELD INVENTORY  •  SHATTERED REACH"
+	inventory_title.add_theme_font_size_override("font_size", 17)
+	inventory_title.add_theme_color_override("font_color", Color("#f0dfbf"))
+	inventory_stack.add_child(inventory_title)
+	inventory_label = Label.new()
+	inventory_label.name = "InventoryContents"
+	inventory_label.custom_minimum_size = Vector2(300, 210)
+	inventory_label.add_theme_font_size_override("font_size", 15)
+	inventory_label.add_theme_color_override("font_color", Color("#e0d0ad"))
+	inventory_stack.add_child(inventory_label)
+	var close_inventory := Button.new()
+	close_inventory.text = "CLOSE"
+	close_inventory.pressed.connect(_toggle_inventory)
+	inventory_stack.add_child(close_inventory)
+	_refresh_progression_ui()
 	var help := Label.new()
 	help.position = Vector2(24, 650)
 	help.text = "MOVE  •  LEFT SIDE      ATTACK  •  SKILL  •  DODGE"
@@ -885,8 +925,12 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 		enemy_health_ui.erase(enemy)
 	_spawn_combat_effect("death", enemy.position + Vector3(0.0, 0.04, 0.0))
 	enemy.queue_free()
+	_roll_enemy_loot(enemy)
+	_gain_xp(12)
+	_save_progress()
 	if target_label != null:
-		target_label.text = "KILLS %d  •  XP %d  •  COINS %d" % [kills, xp, coins]
+		target_label.text = "KILLS %d  •  LV. %d  •  XP %d/%d  •  COINS %d" % [kills, player_level, xp, xp_to_next_level, coins]
+	_refresh_progression_ui()
 
 func _dodge() -> void:
 	var dodge_origin := player.position
@@ -909,3 +953,89 @@ func _ultimate() -> void:
 		status_label.text = "ANCIENT OATH  •  NO TARGET"
 	attack_flash = 0.4
 	attack_anim_time = ATTACK_ANIM_DURATION
+
+func _roll_enemy_loot(enemy: Node3D) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var gained: Array[String] = []
+	if enemy.name == "AshWolf":
+		if rng.randf() <= 0.48:
+			inventory["Ashen Pelt"] = int(inventory.get("Ashen Pelt", 0)) + 1
+			gained.append("Ashen Pelt")
+		if rng.randf() <= 0.10:
+			inventory["Echo Fragment"] = int(inventory.get("Echo Fragment", 0)) + 1
+			gained.append("Echo Fragment")
+	else:
+		inventory["Ancient Shard"] = int(inventory.get("Ancient Shard", 0)) + 1
+		gained.append("Ancient Shard")
+		if rng.randf() <= 0.28:
+			inventory["Ruin Core"] = int(inventory.get("Ruin Core", 0)) + 1
+			gained.append("Ruin Core")
+	if not gained.is_empty():
+		status_label.text = "LOOT FOUND  •  " + ", ".join(gained)
+		if "Echo Fragment" in gained and not codex_discoveries.has("Echoes of Shattered Reach"):
+			codex_discoveries.append("Echoes of Shattered Reach")
+			status_label.text = "CODEX DISCOVERY  •  ECHOES OF SHATTERED REACH"
+
+func _gain_xp(amount: int) -> void:
+	xp += amount
+	var leveled_up := false
+	while xp >= xp_to_next_level:
+		xp -= xp_to_next_level
+		player_level += 1
+		xp_to_next_level += 130 + player_level * 18
+		leveled_up = true
+	if leveled_up:
+		status_label.text = "LEVEL UP  •  WARDEN LV. %d" % player_level
+		_spawn_combat_effect("oath", player.position + Vector3(0.0, 0.04, 0.0))
+	_refresh_progression_ui()
+
+func _toggle_inventory() -> void:
+	if inventory_panel == null:
+		return
+	inventory_panel.visible = not inventory_panel.visible
+	_refresh_progression_ui()
+
+func _refresh_progression_ui() -> void:
+	if stats_label != null:
+		stats_label.text = "HP %d/%d    LV. %d    XP %d/%d    COINS %d" % [player_hp, player_max_hp, player_level, xp, xp_to_next_level, coins]
+	if inventory_label != null:
+		var lines: Array[String] = []
+		for item_name in ["Ashen Pelt", "Ancient Shard", "Echo Fragment", "Ruin Core"]:
+			lines.append("%s  × %d" % [item_name, int(inventory.get(item_name, 0))])
+		lines.append("")
+		lines.append("CODEX DISCOVERIES")
+		if codex_discoveries.is_empty():
+			lines.append("No echoes recorded yet.")
+		else:
+			for discovery in codex_discoveries:
+				lines.append("• " + discovery)
+		inventory_label.text = "\n".join(lines)
+
+func _save_progress() -> void:
+	var save := ConfigFile.new()
+	save.set_value("player", "level", player_level)
+	save.set_value("player", "xp", xp)
+	save.set_value("player", "xp_to_next_level", xp_to_next_level)
+	save.set_value("player", "coins", coins)
+	save.set_value("inventory", "items", inventory)
+	save.set_value("codex", "discoveries", codex_discoveries)
+	save.save("user://eldervale_progress.cfg")
+
+func _load_progress() -> void:
+	var save := ConfigFile.new()
+	if save.load("user://eldervale_progress.cfg") != OK:
+		return
+	player_level = int(save.get_value("player", "level", player_level))
+	xp = int(save.get_value("player", "xp", xp))
+	xp_to_next_level = int(save.get_value("player", "xp_to_next_level", xp_to_next_level))
+	coins = int(save.get_value("player", "coins", coins))
+	var saved_inventory: Variant = save.get_value("inventory", "items", inventory)
+	if saved_inventory is Dictionary:
+		for item_name in inventory.keys():
+			inventory[item_name] = int(saved_inventory.get(item_name, inventory[item_name]))
+	var saved_discoveries: Variant = save.get_value("codex", "discoveries", [])
+	if saved_discoveries is Array:
+		for discovery in saved_discoveries:
+			if not codex_discoveries.has(str(discovery)):
+				codex_discoveries.append(str(discovery))
