@@ -888,7 +888,8 @@ func _process(delta: float) -> void:
 				var boss_state: Dictionary = frost_warden_states[boss]
 				var windup_left := float(boss_state.get("windup", 0.0))
 				if windup_left > 0.0:
-					combat_status = "FROST NOVA INCOMING  •  DODGE NOW  •  %.1fs" % windup_left
+					var attack_name := str(boss_state.get("attack", "nova")).to_upper().replace("NOVA", "NOVA").replace("LANCE", "LANCE").replace("SHATTER", "SHATTER RING")
+					combat_status = "%s INCOMING  •  DODGE NOW  •  %.1fs" % [attack_name, windup_left]
 				elif float(boss_state.get("cooldown", 0.0)) > 0.0:
 					combat_status += "     •     FROST WARDEN ACTIVE"
 				break
@@ -919,7 +920,19 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 			status_label.text = "FROST WARDEN ENRAGED  •  PHASE III" if phase == 2 else "FROST WARDEN AWAKENS  •  PHASE II"
 	_update_boss_hud(enemy)
 	var windup := float(state.get("windup", 0.0))
+	var boss_body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
+	var boss_core := enemy.get_node_or_null("FrostCore") as MeshInstance3D
 	if windup > 0.0:
+		enemy.rotation.z = sin(animation_time * 13.0) * 0.055
+		if boss_body != null:
+			boss_body.scale = Vector3(1.18, 1.05, 0.92) * (1.0 + 0.035 * sin(animation_time * 17.0))
+		if boss_core != null:
+			boss_core.rotation.y += delta * (2.8 if phase == 2 else 1.8)
+			boss_core.scale = (Vector3(0.48, 0.58, 0.32) if phase == 2 else (Vector3(0.38, 0.48, 0.26) if phase == 1 else Vector3(0.32, 0.42, 0.22))) * (1.0 + 0.10 * sin(animation_time * 16.0))
+		var live_marker := state.get("marker") as Node3D
+		if is_instance_valid(live_marker):
+			var pulse := 0.94 + 0.08 * sin(animation_time * 15.0)
+			live_marker.scale = Vector3(pulse, 1.0, pulse)
 		windup -= delta
 		state["windup"] = windup
 		if windup <= 0.0:
@@ -927,6 +940,9 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 			if is_instance_valid(marker):
 				marker.queue_free()
 			state["marker"] = null
+			state["recovery"] = 0.42
+			enemy.rotation.z = 0.24 if phase == 2 else 0.16
+			_spawn_combat_effect("frost_burst", (state.get("target", enemy.position) as Vector3) + Vector3(0.0, 0.04, 0.0))
 			var attack := str(state.get("attack", "nova"))
 			var target: Vector3 = state.get("target", Vector3.ZERO)
 			var origin: Vector3 = state.get("origin", enemy.position)
@@ -937,7 +953,7 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 				hit = player.position.distance_to(target) <= radius
 				damage = 42 if phase == 2 else (34 if phase == 1 else 26)
 			elif attack == "lance":
-				hit = _player_in_ice_lance(enemy.position, target)
+				hit = _player_in_ice_lance(origin, target)
 				damage = 35 if phase == 2 else (28 if phase == 1 else 22)
 			else:
 				var ring_radius := 4.8 if phase == 2 else (4.2 if phase == 1 else 3.6)
@@ -950,6 +966,15 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 				status_label.text = "FROST ATTACK EVADED  •  GOOD DODGE"
 		frost_warden_states[enemy] = state
 		return
+	var recovery_left := maxf(0.0, float(state.get("recovery", 0.0)) - delta)
+	state["recovery"] = recovery_left
+	if recovery_left > 0.0:
+		var recovery_progress := recovery_left / 0.42
+		enemy.rotation.z = 0.24 * recovery_progress
+		if boss_body != null:
+			boss_body.scale = Vector3(1.18, 1.05, 0.92) * (1.0 - 0.055 * sin((1.0 - recovery_progress) * PI))
+	elif boss_body != null:
+		boss_body.scale = Vector3(1.18, 1.05, 0.92)
 	var cooldown := float(state.get("cooldown", 2.8)) - delta
 	if cooldown <= 0.0:
 		var next_attack := int(state.get("next_attack", 0))
@@ -962,6 +987,7 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 		state["attack"] = attack
 		state["windup"] = (1.2 if phase == 0 else (0.95 if phase == 1 else 0.72)) if attack == "nova" else ((1.35 if phase == 0 else (1.05 if phase == 1 else 0.82)) if attack == "lance" else (1.1 if phase == 0 else (0.9 if phase == 1 else 0.68)))
 		state["cooldown"] = (5.1 if phase == 0 else (3.9 if phase == 1 else 2.75))
+		state["recovery"] = 0.0
 		var warning := MeshInstance3D.new()
 		warning.name = "FrostTelegraph_" + attack
 		var warning_material := _mat(Color(0.22, 0.82, 0.94, 0.42), 0.35, 0.2)
@@ -1038,7 +1064,7 @@ func _spawn_combat_effect(kind: String, origin: Variant = null) -> void:
 	effect_root.position = (player.position + Vector3(0.0, 0.04, 0.0)) if origin == null else origin
 	effect_root.rotation.y = player.rotation.y
 	add_child(effect_root)
-	var tint := Color("#c8f5ff") if kind == "slash" else (Color("#70e7ff") if kind == "cleave" or kind == "dodge" else (Color("#ffbf72") if kind == "hit" or kind == "death" else Color("#ffd58a")))
+	var tint := Color("#8df7ff") if kind == "frost_burst" else (Color("#c8f5ff") if kind == "slash" else (Color("#70e7ff") if kind == "cleave" or kind == "dodge" else (Color("#ffbf72") if kind == "hit" or kind == "death" else Color("#ffd58a"))))
 	var glow := _mat(tint, 0.3, 0.25)
 	glow.emission_enabled = true
 	glow.emission = tint
@@ -1074,6 +1100,19 @@ func _spawn_combat_effect(kind: String, origin: Variant = null) -> void:
 			var spark := _box(effect_root, Vector3(0.07, 0.07, 0.42), glow, Vector3(cos(angle) * 0.22, sin(angle) * 0.22, 0.0), "ImpactSpark")
 			spark.rotation.z = angle
 			spark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	elif kind == "frost_burst":
+		var frost_ring_mesh := TorusMesh.new()
+		frost_ring_mesh.inner_radius = 0.45
+		frost_ring_mesh.outer_radius = 0.68
+		frost_ring_mesh.rings = 5
+		frost_ring_mesh.ring_segments = 18
+		var frost_ring := _mesh_node(effect_root, frost_ring_mesh, glow, Vector3(0.0, 0.12, 0.0), "FrostImpactRing")
+		frost_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		for i in range(8):
+			var angle := TAU * float(i) / 8.0
+			var shard := _box(effect_root, Vector3(0.12, 0.35 + float(i % 3) * 0.08, 0.12), glow, Vector3(cos(angle) * 0.42, 0.32, sin(angle) * 0.42), "FrostImpactShard")
+			shard.rotation = Vector3(0.0, angle, angle * 0.35)
+			shard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	elif kind == "death":
 		# Low-poly ember shards replace the former short-lived point light.
 		for i in range(7):
@@ -1087,7 +1126,7 @@ func _spawn_combat_effect(kind: String, origin: Variant = null) -> void:
 			var trail := _box(effect_root, Vector3(0.09, 0.08, 1.0), glow, Vector3(0.0, 0.42 + float(i) * 0.24, 0.45 + float(i) * 0.32), "DodgeAfterimage")
 			trail.rotation.y = (float(i) - 1.0) * 0.18
 			trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var duration := 0.22 if kind == "hit" else (0.52 if kind == "death" else (0.26 if kind == "dodge" else (0.34 if kind == "slash" else (0.48 if kind == "cleave" else 0.72))))
+	var duration := 0.46 if kind == "frost_burst" else (0.22 if kind == "hit" else (0.52 if kind == "death" else (0.26 if kind == "dodge" else (0.34 if kind == "slash" else (0.48 if kind == "cleave" else 0.72))))
 	combat_effects.append({"root": effect_root, "age": 0.0, "duration": duration, "kind": kind})
 
 func _update_combat_effects(delta: float) -> void:
@@ -1115,6 +1154,9 @@ func _update_combat_effects(delta: float) -> void:
 			root.rotation.y += delta * 0.42
 		elif kind == "hit":
 			root.scale = Vector3.ONE * (0.65 + progress * 0.9)
+		elif kind == "frost_burst":
+			root.scale = Vector3.ONE * (0.45 + progress * 1.65)
+			root.rotation.y += delta * 1.8
 		elif kind == "death":
 			root.scale = Vector3.ONE * (0.7 + progress * 1.4)
 			root.rotation.y += delta * 1.6
@@ -1346,6 +1388,7 @@ func _refresh_progression_ui() -> void:
 		lines.append("BOSS REWARD: Frost Sigil + 300 coins + 350 XP")
 		lines.append("FIRST KILL: Glacial Crown + 500 coins + 600 XP")
 		lines.append("BOSS ATTACKS: Frost Nova / Ice Lance / Shatter Ring")
+		lines.append("ATTACK TELEGRAPH: cyan zone pulses faster before impact")
 		lines.append("")
 		lines.append("STORY QUEST")
 		lines.append(_quest_description())
