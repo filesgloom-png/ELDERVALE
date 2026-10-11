@@ -1,5 +1,7 @@
 extends Node3D
 
+class_name Eldervale3DWorld
+
 # ELDERVALE 3D conversion — first playable visual foundation.
 # Existing 2D implementation remains in scripts/main.gd as a migration reference.
 const MOVE_SPEED := 5.2
@@ -133,7 +135,7 @@ func _build_ruins() -> void:
 	var dark := _mat(Color("#343d37"))
 	for side in [-1.0, 1.0]:
 		for col in range(3):
-			var x := side * (13.0 + float(col) * 2.1)
+			var x: float = side * (13.0 + float(col) * 2.1)
 			var z := -13.0 - float(col % 2) * 1.4
 			_box(self, Vector3(1.35, 4.8, 1.35), stone, Vector3(x, 2.4, z), "RuinedPillar")
 			_box(self, Vector3(1.75, 0.35, 1.75), worn, Vector3(x, 4.8, z), "PillarCapital")
@@ -190,7 +192,7 @@ func _build_enemies() -> void:
 		var head := _mesh_node(enemy, SphereMesh.new(), hide_mat, Vector3(0, 1.25, -0.3), "EnemyHead")
 		head.scale = Vector3(0.48, 0.42, 0.52)
 		for side in [-1.0, 1.0]:
-			var ear := _mesh_node(enemy, ConeMesh.new(), hide_mat, Vector3(side * 0.28, 1.65, -0.3), "Ear")
+			var ear := _mesh_node(enemy, PrismMesh.new(), hide_mat, Vector3(side * 0.28, 1.65, -0.3), "Ear")
 			ear.scale = Vector3(0.32, 0.5, 0.25)
 		var eye_mat := _mat(Color("#ffbd76"), 0.3, 0.0)
 		for side in [-1.0, 1.0]:
@@ -315,8 +317,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			touch_index = -1
 			move_input = Vector2.ZERO
 	elif event is InputEventScreenDrag and event.index == touch_index:
-		var delta := event.position - touch_origin
-		move_input = Vector2(clampf(delta.x / 70.0, -1.0, 1.0), clampf(delta.y / 70.0, -1.0, 1.0))
+		var drag_delta: Vector2 = event.position - touch_origin
+		move_input = Vector2(clampf(drag_delta.x / 70.0, -1.0, 1.0), clampf(drag_delta.y / 70.0, -1.0, 1.0))
 
 func _process(delta: float) -> void:
 	world_time += delta
@@ -350,7 +352,6 @@ func _process(delta: float) -> void:
 		hp_bar.value = player_hp
 	if status_label != null:
 		status_label.text = ("ATTACK READY" if attack_cooldown <= 0 else "ATTACK  %.1fs" % attack_cooldown) + "     •     " + ("SKILL READY" if skill_cooldown <= 0 else "SKILL  %.1fs" % skill_cooldown)
-	queue_redraw()
 
 func _nearest_enemy() -> Node3D:
 	var best: Node3D = null
