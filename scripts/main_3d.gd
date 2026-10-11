@@ -139,7 +139,21 @@ func _build_world() -> void:
 			crown_mesh.radius = 1.2 if crown == 0 else 0.9
 			crown_mesh.height = 2.0 if crown == 0 else 1.55
 			var crown_mat: Material = leaf_a if crown == 0 else (leaf_b if crown == 1 else leaf_hi)
-			_mesh_node(tree, crown_mesh, crown_mat, Vector3(rng.randf_range(-0.25, 0.25), 2.55 + float(crown) * 0.48, rng.randf_range(-0.2, 0.2)))
+			var crown_node := _mesh_node(tree, crown_mesh, crown_mat, Vector3(rng.randf_range(-0.25, 0.25), 2.55 + float(crown) * 0.48, rng.randf_range(-0.2, 0.2)), "CanopyLayer")
+			crown_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if crown > 0 else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		# A few restrained side branches and bark scars add silhouette detail without extra foliage layers everywhere.
+		if i % 4 == 0:
+			var branch_mesh := CylinderMesh.new()
+			branch_mesh.top_radius = 0.055
+			branch_mesh.bottom_radius = 0.095
+			branch_mesh.height = 1.05
+			var branch := _mesh_node(tree, branch_mesh, bark, Vector3(0.36, 1.85, 0.02), "LowBranch")
+			branch.rotation.z = -0.9
+			branch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if i % 5 == 0:
+			var scar := _box(tree, Vector3(0.09, 0.42, 0.025), _mat(Color("#302a22")), Vector3(0.12, 1.1, -0.31), "BarkScar")
+			scar.rotation.z = 0.12
+			scar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if i % 3 == 0:
 			var stone := _mesh_node(tree, SphereMesh.new(), moss, Vector3(rng.randf_range(-1.2, 1.2), 0.25, rng.randf_range(-1.2, 1.2)), "MossStone")
 			stone.scale = Vector3(0.8, 0.35, 0.6)
@@ -147,16 +161,39 @@ func _build_world() -> void:
 	var ground_cover_a := _mat(Color("#596f45"), 1.0)
 	var ground_cover_b := _mat(Color("#71804b"), 1.0)
 	var pebble_mat := _mat(Color("#8b8874"), 0.95)
-	for i in range(90):
+	for i in range(72):
 		var patch_x := rng.randf_range(-36.0, 36.0)
 		var patch_z := rng.randf_range(-36.0, 36.0)
 		if absf(patch_x) < 5.5:
 			continue
 		var patch := _mesh_node(self, SphereMesh.new(), ground_cover_a if i % 2 == 0 else ground_cover_b, Vector3(patch_x, 0.035, patch_z), "GroundCover")
 		patch.scale = Vector3(rng.randf_range(0.35, 1.2), 0.025, rng.randf_range(0.35, 1.0))
+		patch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if i % 4 == 0:
 			var pebble := _mesh_node(self, SphereMesh.new(), pebble_mat, Vector3(patch_x + 0.7, 0.12, patch_z - 0.4), "RoadsidePebble")
 			pebble.scale = Vector3(0.18, 0.11, 0.24)
+			pebble.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Small clusters along the trail make the forest floor feel less uniform; detail meshes do not cast shadows.
+	var trail_stone := _mat(Color("#77786b"), 0.98)
+	var trail_moss := _mat(Color("#64764b"), 1.0)
+	for i in range(14):
+		var side := -1.0 if i % 2 == 0 else 1.0
+		var stone_x := side * rng.randf_range(5.8, 8.2)
+		var stone_z := -32.0 + float(i) * 4.6
+		var stone_mesh := SphereMesh.new()
+		stone_mesh.radial_segments = 8
+		stone_mesh.rings = 4
+		var stone := _mesh_node(self, stone_mesh, trail_stone, Vector3(stone_x, 0.22, stone_z), "TrailStone")
+		stone.scale = Vector3(rng.randf_range(0.35, 0.72), rng.randf_range(0.2, 0.38), rng.randf_range(0.32, 0.65))
+		stone.rotation.y = rng.randf_range(-PI, PI)
+		stone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if i % 2 == 0:
+			var moss_mesh := SphereMesh.new()
+			moss_mesh.radial_segments = 8
+			moss_mesh.rings = 4
+			var moss_patch := _mesh_node(self, moss_mesh, trail_moss, Vector3(stone_x, 0.36, stone_z - 0.04), "StoneMoss")
+			moss_patch.scale = Vector3(0.2, 0.045, 0.16)
+			moss_patch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_build_ruins()
 
 func _build_ruins() -> void:
@@ -172,8 +209,27 @@ func _build_ruins() -> void:
 	_box(self, Vector3(13.0, 0.8, 1.5), stone, Vector3(0, 5.0, -14.0), "BrokenLintel")
 	_box(self, Vector3(11.0, 0.2, 1.8), dark, Vector3(0, 0.12, -14.0), "RuinedFoundation")
 	for i in range(8):
-		var rock := _mesh_node(self, SphereMesh.new(), stone, Vector3(-10.0 + float(i) * 2.8, 0.35, -7.0 - float(i % 3) * 1.1), "RuinDebris")
+		var rock_mesh := SphereMesh.new()
+		rock_mesh.radial_segments = 8
+		rock_mesh.rings = 4
+		var rock := _mesh_node(self, rock_mesh, stone, Vector3(-10.0 + float(i) * 2.8, 0.35, -7.0 - float(i % 3) * 1.1), "RuinDebris")
 		rock.scale = Vector3(0.75 + float(i % 3) * 0.18, 0.38, 0.55)
+		rock.rotation.y = float(i) * 0.73
+		rock.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if i % 2 == 0:
+			var lichen_mesh := SphereMesh.new()
+			lichen_mesh.radial_segments = 8
+			lichen_mesh.rings = 4
+			var lichen := _mesh_node(self, lichen_mesh, _mat(Color("#7c8960"), 1.0), rock.position + Vector3(0.08, 0.24, -0.12), "RuinLichen")
+			lichen.scale = Vector3(0.28, 0.06, 0.2)
+			lichen.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# A few broken slabs suggest an old route into the ruins.
+	var slab_mat := _mat(Color("#77786e"), 0.92)
+	for i in range(5):
+		var slab := _box(self, Vector3(1.1 + float(i % 2) * 0.35, 0.16, 0.65), slab_mat, Vector3(-4.4 + float(i) * 2.0, 0.1, -8.4 - float(i % 2) * 0.65), "BrokenPathSlab")
+		slab.rotation.y = float(i % 3 - 1) * 0.18
+		slab.rotation.z = float(i % 2) * 0.07
+		slab.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 func _build_player() -> void:
 	player = Node3D.new()
