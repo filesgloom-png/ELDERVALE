@@ -646,19 +646,27 @@ func _process(delta: float) -> void:
 			var recovery_duration := float(recovery.get("duration", 0.32))
 			var recovery_progress := clampf(recovery_age / recovery_duration, 0.0, 1.0)
 			var recovery_pulse := sin(recovery_progress * PI)
+			var impact_strength := float(recovery.get("strength", 1.0))
+			var impact_direction := float(recovery.get("direction", 1.0))
 			var recovery_body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
 			var recovery_head := enemy.get_node_or_null("EnemyHead") as MeshInstance3D
 			if recovery_body != null:
 				var base_body_scale: Vector3 = recovery.get("body_scale", Vector3(0.72, 0.58, 0.55))
-				recovery_body.scale = base_body_scale + Vector3(0.06, -0.10, 0.08) * recovery_pulse
+				var base_body_rotation: Vector3 = recovery.get("body_rotation", Vector3.ZERO)
+				recovery_body.scale = base_body_scale + Vector3(0.06, -0.10, 0.08) * recovery_pulse * impact_strength
+				recovery_body.rotation = base_body_rotation + Vector3(0.0, 0.0, 0.12 * impact_direction * recovery_pulse * impact_strength)
 			if recovery_head != null:
 				var base_head_position: Vector3 = recovery.get("head_position", Vector3(0.0, 1.25, -0.3))
-				recovery_head.position = base_head_position + Vector3(0.0, -0.07, 0.04) * recovery_pulse
+				var base_head_rotation: Vector3 = recovery.get("head_rotation", Vector3.ZERO)
+				recovery_head.position = base_head_position + Vector3(0.0, -0.07, 0.04) * recovery_pulse * impact_strength
+				recovery_head.rotation = base_head_rotation + Vector3(0.15 * recovery_pulse * impact_strength, 0.0, 0.0)
 			if recovery_age >= recovery_duration:
 				if recovery_body != null:
 					recovery_body.scale = recovery.get("body_scale", Vector3(0.72, 0.58, 0.55))
+					recovery_body.rotation = recovery.get("body_rotation", Vector3.ZERO)
 				if recovery_head != null:
 					recovery_head.position = recovery.get("head_position", Vector3(0.0, 1.25, -0.3))
+					recovery_head.rotation = recovery.get("head_rotation", Vector3.ZERO)
 				enemy_recovery_animations.erase(enemy)
 			else:
 				recovery["age"] = recovery_age
@@ -831,11 +839,17 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 		var flash_material := body.material_override as StandardMaterial3D
 		if flash_material != null:
 			flash_material.albedo_color = Color("#ffd0ad")
+		var impact_strength := clampf(float(damage) / 90.0, 0.4, 1.0)
+		var impact_direction := -1.0 if enemy.position.x < player.position.x else 1.0
 		enemy_recovery_animations[enemy] = {
 			"age": 0.0,
 			"duration": 0.32,
+			"strength": impact_strength,
+			"direction": impact_direction,
 			"body_scale": body.scale,
-			"head_position": head.position if head != null else Vector3(0.0, 1.25, -0.3)
+			"body_rotation": body.rotation,
+			"head_position": head.position if head != null else Vector3(0.0, 1.25, -0.3),
+			"head_rotation": head.rotation if head != null else Vector3.ZERO
 		}
 	enemy_hit_timers[enemy] = ENEMY_HIT_REACTION_DURATION
 	_spawn_combat_effect("hit", enemy.position + Vector3(0.0, 0.9, 0.0))
