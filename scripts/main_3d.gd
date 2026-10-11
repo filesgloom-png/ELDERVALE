@@ -25,6 +25,11 @@ var inventory_label: Label
 var inventory_panel: PanelContainer
 var inventory: Dictionary = {"Ashen Pelt": 0, "Ancient Shard": 0, "Echo Fragment": 0, "Ruin Core": 0}
 var codex_discoveries: Array[String] = []
+var weapon_level := 0
+var armor_level := 0
+var quest_stage := 0
+var quest_stage_progress := 0
+var quest_completed := false
 var enemies: Array[Node3D] = []
 var hp_bar: ProgressBar
 var status_label: Label
@@ -520,7 +525,7 @@ func _build_hud() -> void:
 	inventory_panel = PanelContainer.new()
 	inventory_panel.name = "InventoryPanel"
 	inventory_panel.position = Vector2(340, 120)
-	inventory_panel.custom_minimum_size = Vector2(330, 300)
+	inventory_panel.custom_minimum_size = Vector2(370, 430)
 	inventory_panel.visible = false
 	var inventory_style := StyleBoxFlat.new()
 	inventory_style.bg_color = Color(0.035, 0.055, 0.05, 0.96)
@@ -539,10 +544,18 @@ func _build_hud() -> void:
 	inventory_stack.add_child(inventory_title)
 	inventory_label = Label.new()
 	inventory_label.name = "InventoryContents"
-	inventory_label.custom_minimum_size = Vector2(300, 210)
+	inventory_label.custom_minimum_size = Vector2(340, 225)
 	inventory_label.add_theme_font_size_override("font_size", 15)
 	inventory_label.add_theme_color_override("font_color", Color("#e0d0ad"))
 	inventory_stack.add_child(inventory_label)
+	var craft_weapon_button := Button.new()
+	craft_weapon_button.text = "CRAFT / EQUIP  •  ASHEN BLADE"
+	craft_weapon_button.pressed.connect(_craft_weapon)
+	inventory_stack.add_child(craft_weapon_button)
+	var craft_armor_button := Button.new()
+	craft_armor_button.text = "CRAFT / EQUIP  •  RUIN ARMOR"
+	craft_armor_button.pressed.connect(_craft_armor)
+	inventory_stack.add_child(craft_armor_button)
 	var close_inventory := Button.new()
 	close_inventory.text = "CLOSE"
 	close_inventory.pressed.connect(_toggle_inventory)
@@ -846,8 +859,9 @@ func _attack() -> void:
 	attack_cooldown = 0.48
 	var target := _nearest_enemy()
 	if target != null:
-		_damage_enemy(target, 34)
-		status_label.text = "SWORD STRIKE  •  34 DAMAGE"
+		var damage := 34 + weapon_level * 9
+		_damage_enemy(target, damage)
+		status_label.text = "SWORD STRIKE  •  %d DAMAGE" % damage
 	else:
 		status_label.text = "SWORD SWING  •  MOVE CLOSER"
 	attack_flash = 0.18
@@ -859,8 +873,9 @@ func _skill() -> void:
 	skill_cooldown = 4.0
 	var target := _nearest_enemy()
 	if target != null:
-		_damage_enemy(target, 58)
-		status_label.text = "WARDEN CLEAVE  •  58 DAMAGE"
+		var damage := 58 + weapon_level * 14
+		_damage_enemy(target, damage)
+		status_label.text = "WARDEN CLEAVE  •  %d DAMAGE" % damage
 	else:
 		status_label.text = "WARDEN CLEAVE  •  NO TARGET"
 	attack_flash = 0.32
@@ -947,8 +962,9 @@ func _ultimate() -> void:
 	_spawn_combat_effect("oath")
 	var target := _nearest_enemy()
 	if target != null:
-		_damage_enemy(target, 90)
-		status_label.text = "ANCIENT OATH  •  90 DAMAGE"
+		var damage := 90 + weapon_level * 22
+		_damage_enemy(target, damage)
+		status_label.text = "ANCIENT OATH  •  %d DAMAGE" % damage
 	else:
 		status_label.text = "ANCIENT OATH  •  NO TARGET"
 	attack_flash = 0.4
@@ -973,6 +989,8 @@ func _roll_enemy_loot(enemy: Node3D) -> void:
 			gained.append("Ruin Core")
 	if not gained.is_empty():
 		status_label.text = "LOOT FOUND  •  " + ", ".join(gained)
+	_advance_quest(gained)
+	_save_progress()
 		if "Echo Fragment" in gained and not codex_discoveries.has("Echoes of Shattered Reach"):
 			codex_discoveries.append("Echoes of Shattered Reach")
 			status_label.text = "CODEX DISCOVERY  •  ECHOES OF SHATTERED REACH"
@@ -1004,6 +1022,14 @@ func _refresh_progression_ui() -> void:
 		for item_name in ["Ashen Pelt", "Ancient Shard", "Echo Fragment", "Ruin Core"]:
 			lines.append("%s  × %d" % [item_name, int(inventory.get(item_name, 0))])
 		lines.append("")
+		lines.append("EQUIPMENT")
+		lines.append("Ashen Blade  Lv.%d  •  +%d attack" % [weapon_level, weapon_level * 9])
+		lines.append("Ruin Armor  Lv.%d  •  +%d max HP" % [armor_level, armor_level * 18])
+		lines.append("WEAPON: 3 Shards + 2 Pelts + 35 coins")
+		lines.append("ARMOR: 3 Pelts + 2 Cores + 35 coins")
+		lines.append("")
+		lines.append("STORY QUEST")
+		lines.append(_quest_description())
 		lines.append("CODEX DISCOVERIES")
 		if codex_discoveries.is_empty():
 			lines.append("No echoes recorded yet.")
@@ -1012,6 +1038,79 @@ func _refresh_progression_ui() -> void:
 				lines.append("• " + discovery)
 		inventory_label.text = "\n".join(lines)
 
+
+func _craft_weapon() -> void:
+	if weapon_level >= 5:
+		status_label.text = "ASHEN BLADE IS ALREADY MAXED"
+		return
+	if int(inventory.get("Ancient Shard", 0)) < 3 or int(inventory.get("Ashen Pelt", 0)) < 2 or coins < 35:
+		status_label.text = "BLADE RECIPE: 3 SHARDS + 2 PELTS + 35 COINS"
+		return
+	inventory["Ancient Shard"] = int(inventory["Ancient Shard"]) - 3
+	inventory["Ashen Pelt"] = int(inventory["Ashen Pelt"]) - 2
+	coins -= 35
+	weapon_level += 1
+	status_label.text = "ASHEN BLADE FORGED  •  LEVEL %d  •  +%d ATTACK" % [weapon_level, weapon_level * 9]
+	_refresh_progression_ui()
+	_save_progress()
+
+func _craft_armor() -> void:
+	if armor_level >= 5:
+		status_label.text = "RUIN ARMOR IS ALREADY MAXED"
+		return
+	if int(inventory.get("Ashen Pelt", 0)) < 3 or int(inventory.get("Ruin Core", 0)) < 2 or coins < 35:
+		status_label.text = "ARMOR RECIPE: 3 PELTS + 2 CORES + 35 COINS"
+		return
+	inventory["Ashen Pelt"] = int(inventory["Ashen Pelt"]) - 3
+	inventory["Ruin Core"] = int(inventory["Ruin Core"]) - 2
+	coins -= 35
+	armor_level += 1
+	player_max_hp = 148 + armor_level * 18
+	player_hp = mini(player_max_hp, player_hp + 18)
+	status_label.text = "RUIN ARMOR EQUIPPED  •  LEVEL %d  •  +%d MAX HP" % [armor_level, armor_level * 18]
+	_refresh_progression_ui()
+	_save_progress()
+
+func _quest_description() -> String:
+	match quest_stage:
+		0:
+			return "I. ASHEN THREAT  •  DEFEAT 3 FOES  (%d/3)" % mini(quest_stage_progress, 3)
+		1:
+			return "II. WOLF PELTS  •  COLLECT 3 PELTS  (%d/3)" % mini(quest_stage_progress, 3)
+		2:
+			return "III. RUIN HEARTS  •  COLLECT 2 CORES  (%d/2)" % mini(quest_stage_progress, 2)
+		_:
+			return "STORY QUEST COMPLETE  •  REWARDS CLAIMED"
+
+func _advance_quest(gained: Array[String]) -> void:
+	if quest_completed:
+		return
+	if quest_stage == 0:
+		quest_stage_progress += 1
+		if quest_stage_progress >= 3:
+			quest_stage = 1
+			quest_stage_progress = 0
+			status_label.text = "QUEST UPDATED  •  GATHER ASHEN PELTS"
+	elif quest_stage == 1:
+		if gained.has("Ashen Pelt"):
+			quest_stage_progress += 1
+			if quest_stage_progress >= 3:
+				quest_stage = 2
+				quest_stage_progress = 0
+				status_label.text = "QUEST UPDATED  •  FIND RUIN CORES"
+	elif quest_stage == 2:
+		if gained.has("Ruin Core"):
+			quest_stage_progress += 1
+			if quest_stage_progress >= 2:
+				quest_stage = 3
+				quest_stage_progress = 0
+				quest_completed = true
+				coins += 150
+				inventory["Echo Fragment"] = int(inventory.get("Echo Fragment", 0)) + 2
+				_gain_xp(120)
+				status_label.text = "STORY QUEST COMPLETE  •  +120 XP  +150 COINS  +2 ECHO FRAGMENTS"
+	_refresh_progression_ui()
+
 func _save_progress() -> void:
 	var save := ConfigFile.new()
 	save.set_value("player", "level", player_level)
@@ -1019,6 +1118,11 @@ func _save_progress() -> void:
 	save.set_value("player", "xp_to_next_level", xp_to_next_level)
 	save.set_value("player", "coins", coins)
 	save.set_value("inventory", "items", inventory)
+	save.set_value("equipment", "weapon_level", weapon_level)
+	save.set_value("equipment", "armor_level", armor_level)
+	save.set_value("quest", "stage", quest_stage)
+	save.set_value("quest", "progress", quest_stage_progress)
+	save.set_value("quest", "completed", quest_completed)
 	save.set_value("codex", "discoveries", codex_discoveries)
 	save.save("user://eldervale_progress.cfg")
 
@@ -1034,6 +1138,13 @@ func _load_progress() -> void:
 	if saved_inventory is Dictionary:
 		for item_name in inventory.keys():
 			inventory[item_name] = int(saved_inventory.get(item_name, inventory[item_name]))
+	weapon_level = clampi(int(save.get_value("equipment", "weapon_level", weapon_level)), 0, 5)
+	armor_level = clampi(int(save.get_value("equipment", "armor_level", armor_level)), 0, 5)
+	quest_stage = clampi(int(save.get_value("quest", "stage", quest_stage)), 0, 3)
+	quest_stage_progress = maxi(0, int(save.get_value("quest", "progress", quest_stage_progress)))
+	quest_completed = bool(save.get_value("quest", "completed", quest_completed))
+	player_max_hp = 148 + armor_level * 18
+	player_hp = mini(player_hp, player_max_hp)
 	var saved_discoveries: Variant = save.get_value("codex", "discoveries", [])
 	if saved_discoveries is Array:
 		for discovery in saved_discoveries:
