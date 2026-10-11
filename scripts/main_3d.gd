@@ -56,8 +56,10 @@ func _build_environment() -> void:
 	sun.name = "LateAfternoonSun"
 	sun.rotation_degrees = Vector3(-48, -32, 0)
 	sun.light_color = Color("#ffe0b0")
-	sun.light_energy = 1.25
+	sun.light_energy = 0.95
 	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_max_distance = 42.0
 	sun.directional_shadow_max_distance = 65.0
 	add_child(sun)
 
@@ -127,6 +129,20 @@ func _build_world() -> void:
 		if i % 3 == 0:
 			var stone := _mesh_node(tree, SphereMesh.new(), moss, Vector3(rng.randf_range(-1.2, 1.2), 0.25, rng.randf_range(-1.2, 1.2)), "MossStone")
 			stone.scale = Vector3(0.8, 0.35, 0.6)
+	# Scatter low ground cover and weathered stones to break up the empty terrain.
+	var ground_cover_a := _mat(Color("#596f45"), 1.0)
+	var ground_cover_b := _mat(Color("#71804b"), 1.0)
+	var pebble_mat := _mat(Color("#8b8874"), 0.95)
+	for i in range(90):
+		var patch_x := rng.randf_range(-36.0, 36.0)
+		var patch_z := rng.randf_range(-36.0, 36.0)
+		if absf(patch_x) < 5.5:
+			continue
+		var patch := _mesh_node(self, SphereMesh.new(), ground_cover_a if i % 2 == 0 else ground_cover_b, Vector3(patch_x, 0.035, patch_z), "GroundCover")
+		patch.scale = Vector3(rng.randf_range(0.35, 1.2), 0.025, rng.randf_range(0.35, 1.0))
+		if i % 4 == 0:
+			var pebble := _mesh_node(self, SphereMesh.new(), pebble_mat, Vector3(patch_x + 0.7, 0.12, patch_z - 0.4), "RoadsidePebble")
+			pebble.scale = Vector3(0.18, 0.11, 0.24)
 	_build_ruins()
 
 func _build_ruins() -> void:
@@ -171,13 +187,13 @@ func _build_player() -> void:
 	_box(player, Vector3(0.42, 0.12, 0.22), gold, Vector3(0.79, 0.62, -0.1), "SwordGuard")
 	camera = Camera3D.new()
 	camera.name = "ThirdPersonCamera"
-	camera.position = Vector3(0, 7.2, 10.5)
+	camera.position = Vector3(0, 4.8, 7.4)
 	camera.rotation_degrees = Vector3(-28, 0, 0)
 	camera.current = true
 	player.add_child(camera)
-	camera.position = Vector3(0, 7.0, 10.0)
-	camera.rotation = Vector3(deg_to_rad(-28), 0, 0)
-	camera.fov = 72.0
+	camera.position = Vector3(0, 4.8, 7.4)
+	camera.rotation = Vector3(deg_to_rad(-25), 0, 0)
+	camera.fov = 62.0
 
 func _build_enemies() -> void:
 	var positions := [Vector3(4, 0, -4), Vector3(-5, 0, -10), Vector3(8, 0, -17), Vector3(-9, 0, -20)]
@@ -337,8 +353,8 @@ func _process(delta: float) -> void:
 		player.position.x = clampf(player.position.x, -WORLD_LIMIT, WORLD_LIMIT)
 		player.position.z = clampf(player.position.z, -WORLD_LIMIT, WORLD_LIMIT)
 		player.rotation.y = lerp_angle(player.rotation.y, atan2(direction.x, direction.z), minf(1.0, delta * 10.0))
-		camera.position = camera.position.lerp(Vector3(0, 7.0, 10.0), minf(1.0, delta * 4.0))
-		camera.rotation.x = lerp(camera.rotation.x, deg_to_rad(-28), minf(1.0, delta * 4.0))
+		camera.position = camera.position.lerp(Vector3(0, 4.8, 7.4), minf(1.0, delta * 4.0))
+		camera.rotation.x = lerp(camera.rotation.x, deg_to_rad(-25), minf(1.0, delta * 4.0))
 	camera.look_at(player.position + Vector3(0, 1.0, -2.0), Vector3.UP)
 	for i in range(enemies.size()):
 		var enemy := enemies[i]
