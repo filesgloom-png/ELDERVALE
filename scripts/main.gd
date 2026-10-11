@@ -2152,8 +2152,15 @@ func _draw_hud() -> void:
 			var boss_color := Color("#83e8e0") if is_memory_boss else Color("#ff896d")
 			draw_string(ThemeDB.fallback_font, Vector2(440, 16), boss_title, HORIZONTAL_ALIGNMENT_CENTER, 400, 16, boss_color)
 			draw_rect(Rect2(456, 35, 368, 14), Color("#243b39") if is_memory_boss else Color("#382629"))
-			draw_rect(Rect2(456, 35, 368.0 * boss_hp_ratio, 14), Color("#4fc9b9") if is_memory_boss else Color("#c74f46"))
+			var boss_bar_color := Color("#4fc9b9") if is_memory_boss else Color("#c74f46")
+			if boss_hp_ratio <= 0.25:
+				boss_bar_color = boss_bar_color.lerp(Color("#fff0b0"), 0.22 + 0.12 * sin(elapsed * 7.0))
+			draw_rect(Rect2(456, 35, 368.0 * boss_hp_ratio, 14), boss_bar_color)
 			draw_rect(Rect2(456, 35, 368, 14), boss_color.lightened(0.2), false, 1.5)
+			for phase_mark in [0.25, 0.5, 0.75]:
+				var mark_x := 456.0 + 368.0 * phase_mark
+				draw_line(Vector2(mark_x, 33), Vector2(mark_x, 51), Color("#f3e8d0", 0.9), 2.0, true)
+			draw_string(ThemeDB.fallback_font, Vector2(828, 64), "%d%%" % roundi(boss_hp_ratio * 100.0), HORIZONTAL_ALIGNMENT_RIGHT, 42, 11, Color("#e7dfc8"))
 			break
 	draw_rect(Rect2(22, 20, 350, 106), Color(0.035, 0.055, 0.05, 0.9))
 	draw_rect(Rect2(22, 20, 4, 106), Color("#b98a51"))
