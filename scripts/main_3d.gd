@@ -553,16 +553,16 @@ func _process(delta: float) -> void:
 	if status_label != null:
 		status_label.text = ("ATTACK READY" if attack_cooldown <= 0 else "ATTACK  %.1fs" % attack_cooldown) + "     •     " + ("SKILL READY" if skill_cooldown <= 0 else "SKILL  %.1fs" % skill_cooldown)
 
-func _spawn_combat_effect(kind: String) -> void:
+func _spawn_combat_effect(kind: String, origin: Variant = null) -> void:
 	if player == null:
 		return
 	# Short-lived emissive meshes only: no particles and no extra dynamic lights.
 	var effect_root := Node3D.new()
 	effect_root.name = "CombatFX_" + kind
-	effect_root.position = player.position + Vector3(0.0, 0.04, 0.0)
+	effect_root.position = (player.position + Vector3(0.0, 0.04, 0.0)) if origin == null else origin
 	effect_root.rotation.y = player.rotation.y
 	add_child(effect_root)
-	var tint := Color("#c8f5ff") if kind == "slash" else (Color("#70e7ff") if kind == "cleave" else Color("#ffd58a"))
+	var tint := Color("#c8f5ff") if kind == "slash" else (Color("#70e7ff") if kind == "cleave" or kind == "dodge" else (Color("#ffbf72") if kind == "hit" or kind == "death" else Color("#ffd58a")))
 	var glow := _mat(tint, 0.3, 0.25)
 	glow.emission_enabled = true
 	glow.emission = tint
@@ -579,7 +579,7 @@ func _spawn_combat_effect(kind: String) -> void:
 			streak.rotation.y = (float(i) - 2.0) * 0.19
 			streak.rotation.x = -0.18
 			streak.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	else:
+	elif kind == "oath":
 		var ring_mesh := TorusMesh.new()
 		ring_mesh.inner_radius = 1.35
 		ring_mesh.outer_radius = 1.52
@@ -591,7 +591,28 @@ func _spawn_combat_effect(kind: String) -> void:
 			var beam := _box(effect_root, Vector3(0.12, 2.2, 0.12), glow, Vector3(cos(float(i) * TAU / 4.0) * 1.35, 1.1, sin(float(i) * TAU / 4.0) * 1.35), "OathRuneBeam")
 			beam.rotation.y = float(i) * TAU / 4.0
 			beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	combat_effects.append({"root": effect_root, "age": 0.0, "duration": 0.34 if kind == "slash" else (0.48 if kind == "cleave" else 0.72), "kind": kind})
+	elif kind == "hit":
+		# Five tiny angular sparks radiate from the impact point.
+		for i in range(5):
+			var angle := TAU * float(i) / 5.0
+			var spark := _box(effect_root, Vector3(0.07, 0.07, 0.42), glow, Vector3(cos(angle) * 0.22, sin(angle) * 0.22, 0.0), "ImpactSpark")
+			spark.rotation.z = angle
+			spark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	elif kind == "death":
+		# Low-poly ember shards replace the former short-lived point light.
+		for i in range(7):
+			var angle := TAU * float(i) / 7.0
+			var shard := _box(effect_root, Vector3(0.11, 0.18 + float(i % 3) * 0.04, 0.1), glow, Vector3(cos(angle) * 0.32, 0.48 + float(i % 2) * 0.18, sin(angle) * 0.32), "DeathEmberShard")
+			shard.rotation = Vector3(angle * 0.4, angle, angle * 0.7)
+			shard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	elif kind == "dodge":
+		# Three short afterimage bars stay at the dodge starting point.
+		for i in range(3):
+			var trail := _box(effect_root, Vector3(0.09, 0.08, 1.0), glow, Vector3(0.0, 0.42 + float(i) * 0.24, 0.45 + float(i) * 0.32), "DodgeAfterimage")
+			trail.rotation.y = (float(i) - 1.0) * 0.18
+			trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var duration := 0.22 if kind == "hit" else (0.52 if kind == "death" else (0.26 if kind == "dodge" else (0.34 if kind == "slash" else (0.48 if kind == "cleave" else 0.72))))
+	combat_effects.append({"root": effect_root, "age": 0.0, "duration": duration, "kind": kind})
 
 func _update_combat_effects(delta: float) -> void:
 	for i in range(combat_effects.size() - 1, -1, -1):
@@ -616,6 +637,14 @@ func _update_combat_effects(delta: float) -> void:
 		elif kind == "cleave":
 			root.scale = Vector3(0.75 + progress * 0.7, 0.9, 0.8 + progress * 0.65)
 			root.rotation.y += delta * 0.42
+		elif kind == "hit":
+			root.scale = Vector3.ONE * (0.65 + progress * 0.9)
+		elif kind == "death":
+			root.scale = Vector3.ONE * (0.7 + progress * 1.4)
+			root.rotation.y += delta * 1.6
+		elif kind == "dodge":
+			root.scale = Vector3(1.0 + progress * 0.35, 1.0 - progress * 0.25, 1.0 + progress * 0.55)
+			root.position.y += delta * 0.35
 		else:
 			root.scale = Vector3.ONE * (0.55 + progress * 1.25)
 			root.rotation.y += delta * 0.55
@@ -668,6 +697,7 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 		if flash_material != null:
 			flash_material.albedo_color = Color("#e5a08c")
 	enemy_hit_timers[enemy] = ENEMY_HIT_REACTION_DURATION
+	_spawn_combat_effect("hit", enemy.position + Vector3(0.0, 0.9, 0.0))
 	var recoil := enemy.global_position - player.global_position
 	recoil.y = 0.0
 	if recoil.length_squared() > 0.001:
@@ -683,27 +713,20 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	enemy_health.erase(enemy)
 	enemy_hit_timers.erase(enemy)
 	enemy_base_colors.erase(enemy)
-	var burst := OmniLight3D.new()
-	burst.light_color = Color("#ffbf72")
-	burst.light_energy = 2.5
-	burst.omni_range = 4.5
-	burst.position = enemy.position + Vector3(0, 1.0, 0)
-	add_child(burst)
-	var timer := get_tree().create_timer(0.16)
-	timer.timeout.connect(func():
-		if is_instance_valid(burst): burst.queue_free()
-	)
+	_spawn_combat_effect("death", enemy.position + Vector3(0.0, 0.04, 0.0))
 	enemy.queue_free()
 	if target_label != null:
 		target_label.text = "KILLS %d  •  XP %d  •  COINS %d" % [kills, xp, coins]
 
 func _dodge() -> void:
+	var dodge_origin := player.position
 	var direction := Vector3(move_input.x, 0, move_input.y)
 	if direction.length_squared() < 0.01:
 		direction = -player.global_transform.basis.z
 	player.position += direction.normalized() * 3.0
 	player.position.x = clampf(player.position.x, -WORLD_LIMIT, WORLD_LIMIT)
 	player.position.z = clampf(player.position.z, -WORLD_LIMIT, WORLD_LIMIT)
+	_spawn_combat_effect("dodge", dodge_origin)
 	status_label.text = "EVASIVE STEP"
 
 func _ultimate() -> void:
