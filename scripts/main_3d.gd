@@ -31,6 +31,8 @@ var enemy_tails: Array[Node3D] = []
 var enemy_health: Dictionary = {}
 var enemy_hit_timers: Dictionary = {}
 var enemy_base_colors: Dictionary = {}
+var enemy_health_ui: Dictionary = {}
+var damage_number_effects: Array[Dictionary] = []
 var animated_sword: Node3D
 var animated_cape: Node3D
 var animated_torso: Node3D
@@ -358,6 +360,78 @@ func _build_enemies() -> void:
 		enemy_health[enemy] = 75 if i < 3 else 110
 		enemy_hit_timers[enemy] = 0.0
 		enemy_base_colors[enemy] = hide_mat.albedo_color
+		_create_enemy_health_ui(enemy)
+
+func _create_enemy_health_ui(enemy: Node3D) -> void:
+	var root := Node3D.new()
+	root.name = "EnemyHealthDisplay"
+	root.position = Vector3(0.0, 2.05, 0.0)
+	enemy.add_child(root)
+	var back_material := _mat(Color("#1c2422"), 0.95)
+	var fill_material := _mat(Color("#72bd70"), 0.8)
+	var background := _box(root, Vector3(1.0, 0.075, 0.035), back_material, Vector3.ZERO, "HealthBarBackground")
+	background.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var fill := _box(root, Vector3(0.94, 0.045, 0.045), fill_material, Vector3(-0.03, 0.0, 0.026), "HealthBarFill")
+	fill.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var name_tag := Label3D.new()
+	name_tag.name = "EnemyName"
+	name_tag.text = "ASH WOLF" if enemy.name == "AshWolf" else "RUIN STALKER"
+	name_tag.position = Vector3(0.0, 0.17, 0.0)
+	name_tag.font_size = 28
+	name_tag.pixel_size = 0.006
+	name_tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	name_tag.modulate = Color("#f0dfc3")
+	name_tag.outline_size = 4
+	root.add_child(name_tag)
+	enemy_health_ui[enemy] = {"root": root, "fill": fill, "material": fill_material}
+	_update_enemy_health_ui(enemy)
+
+func _update_enemy_health_ui(enemy: Node3D) -> void:
+	if not enemy_health_ui.has(enemy):
+		return
+	var display: Dictionary = enemy_health_ui[enemy]
+	var fill := display.get("fill") as MeshInstance3D
+	var material := display.get("material") as StandardMaterial3D
+	if fill == null or material == null:
+		return
+	var max_hp := 110.0 if enemy.name == "RuinStalker" else 75.0
+	var ratio := clampf(float(enemy_health.get(enemy, max_hp)) / max_hp, 0.0, 1.0)
+	fill.scale.x = ratio
+	fill.position.x = -0.03 - 0.47 * (1.0 - ratio)
+	material.albedo_color = Color("#72bd70") if ratio > 0.55 else (Color("#e0b45f") if ratio > 0.25 else Color("#d9685c"))
+
+func _spawn_damage_number(enemy: Node3D, damage: int) -> void:
+	var number := Label3D.new()
+	number.name = "FloatingDamageNumber"
+	number.text = "-%d" % damage
+	number.font_size = 48
+	number.pixel_size = 0.008
+	number.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	number.modulate = Color("#fff0bd")
+	number.outline_size = 7
+	number.outline_modulate = Color("#3b2420")
+	number.position = enemy.global_position + Vector3(0.0, 2.0, 0.0)
+	add_child(number)
+	damage_number_effects.append({"node": number, "age": 0.0, "duration": 0.72, "drift": Vector3(0.0, 1.15, 0.0)})
+
+func _update_damage_numbers(delta: float) -> void:
+	for i in range(damage_number_effects.size() - 1, -1, -1):
+		var item: Dictionary = damage_number_effects[i]
+		var label := item.get("node") as Label3D
+		if not is_instance_valid(label):
+			damage_number_effects.remove_at(i)
+			continue
+		var age := float(item.get("age", 0.0)) + delta
+		var duration := float(item.get("duration", 0.72))
+		item["age"] = age
+		damage_number_effects[i] = item
+		if age >= duration:
+			label.queue_free()
+			damage_number_effects.remove_at(i)
+			continue
+		label.position += (item.get("drift", Vector3.UP) as Vector3) * delta
+		label.modulate.a = 1.0 - clampf(age / duration, 0.0, 1.0)
+		label.scale = Vector3.ONE * (1.0 + sin(clampf(age / 0.12, 0.0, 1.0) * PI) * 0.12)
 
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
@@ -486,6 +560,7 @@ func _process(delta: float) -> void:
 		var pulse := 0.88 + 0.22 * sin(animation_time * 1.35 + float(i) * 0.7)
 		magical_materials[i].emission_energy_multiplier = pulse * (1.25 if i < 3 else 0.8)
 	_update_combat_effects(delta)
+	_update_damage_numbers(delta)
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	skill_cooldown = maxf(0.0, skill_cooldown - delta)
 	attack_flash = maxf(0.0, attack_flash - delta)
@@ -537,6 +612,11 @@ func _process(delta: float) -> void:
 		var hit_left: float = maxf(0.0, float(enemy_hit_timers.get(enemy, 0.0)) - delta)
 		enemy_hit_timers[enemy] = hit_left
 		enemy.rotation.z = lerpf(enemy.rotation.z, 0.0, minf(1.0, delta * 12.0))
+		if enemy_health_ui.has(enemy):
+			var display: Dictionary = enemy_health_ui[enemy]
+			var display_root := display.get("root") as Node3D
+			if is_instance_valid(display_root) and camera != null:
+				display_root.look_at(camera.global_position, Vector3.UP)
 		if hit_left <= 0.0 and enemy.has_node("EnemyBody"):
 			var enemy_body := enemy.get_node("EnemyBody") as MeshInstance3D
 			var enemy_material := enemy_body.material_override as StandardMaterial3D
@@ -690,6 +770,8 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	if not is_instance_valid(enemy): return
 	var remaining_hp: int = int(enemy_health.get(enemy, 75)) - damage
 	enemy_health[enemy] = remaining_hp
+	_spawn_damage_number(enemy, damage)
+	_update_enemy_health_ui(enemy)
 	# Brief hit-stop-like feedback: a red flash, recoil, and a short interruption of pursuit.
 	var body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
 	if body != null:
@@ -713,6 +795,7 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	enemy_health.erase(enemy)
 	enemy_hit_timers.erase(enemy)
 	enemy_base_colors.erase(enemy)
+	enemy_health_ui.erase(enemy)
 	_spawn_combat_effect("death", enemy.position + Vector3(0.0, 0.04, 0.0))
 	enemy.queue_free()
 	if target_label != null:
