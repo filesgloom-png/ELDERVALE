@@ -28,11 +28,15 @@ var animated_arms: Array[Node3D] = []
 var animated_legs: Array[Node3D] = []
 var enemy_legs: Array[Node3D] = []
 var enemy_tails: Array[Node3D] = []
+var enemy_health: Dictionary = {}
+var enemy_hit_timers: Dictionary = {}
+var enemy_base_colors: Dictionary = {}
 var animated_sword: Node3D
 var animated_cape: Node3D
 var animated_torso: Node3D
 var attack_anim_time := 0.0
-const ATTACK_ANIM_DURATION := 0.34
+const ATTACK_ANIM_DURATION := 0.62
+const ENEMY_HIT_REACTION_DURATION := 0.24
 var animation_time := 0.0
 
 func _ready() -> void:
@@ -256,6 +260,9 @@ func _build_enemies() -> void:
 			var eye := _mesh_node(enemy, SphereMesh.new(), eye_mat, Vector3(side * 0.17, 1.31, -0.73), "Eye")
 			eye.scale = Vector3(0.075, 0.07, 0.05)
 		enemies.append(enemy)
+		enemy_health[enemy] = 75 if i < 3 else 110
+		enemy_hit_timers[enemy] = 0.0
+		enemy_base_colors[enemy] = hide_mat.albedo_color
 
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
@@ -393,18 +400,25 @@ func _process(delta: float) -> void:
 	var gait := sin(animation_time * 9.0) * (0.62 if walking else 0.035)
 	attack_anim_time = maxf(0.0, attack_anim_time - delta)
 	var attack_phase := 1.0 - attack_anim_time / ATTACK_ANIM_DURATION
-	var swing := sin(clampf(attack_phase, 0.0, 1.0) * PI) if attack_anim_time > 0.0 else 0.0
+	var attack_active := attack_anim_time > 0.0
+	var anticipation := sin(clampf(attack_phase / 0.28, 0.0, 1.0) * PI * 0.5) if attack_active else 0.0
+	var strike_progress := clampf((attack_phase - 0.28) / 0.34, 0.0, 1.0)
+	var swing := sin(strike_progress * PI) if attack_active and attack_phase >= 0.28 and attack_phase <= 0.62 else 0.0
+	var follow_through := (1.0 - clampf((attack_phase - 0.62) / 0.38, 0.0, 1.0)) if attack_active and attack_phase > 0.62 else 0.0
 	for i in range(animated_arms.size()):
-		animated_arms[i].rotation.x = -gait * (1.0 if i == 0 else -1.0) - swing * 1.25
+		var arm_side := 1.0 if i == 0 else -1.0
+		animated_arms[i].rotation.x = -gait * arm_side - anticipation * 0.42 - swing * 1.5 + follow_through * 0.2
+		animated_arms[i].rotation.z = -anticipation * 0.16 - swing * 0.22
 	for i in range(animated_legs.size()):
-		animated_legs[i].rotation.x = gait * (1.0 if i == 0 else -1.0)
+		animated_legs[i].rotation.x = gait * (1.0 if i == 0 else -1.0) + anticipation * 0.08 - swing * 0.12
 	if animated_sword != null:
-		animated_sword.rotation.z = -0.28 - swing * 1.2
-		animated_sword.rotation.x = swing * 0.3
+		animated_sword.rotation.z = -0.28 + anticipation * 0.82 - swing * 1.55 + follow_through * 0.18
+		animated_sword.rotation.x = -anticipation * 0.18 + swing * 0.42
 	if animated_torso != null:
-		animated_torso.position.y = 1.12 + (absf(gait) * 0.035 if walking else 0.0) - swing * 0.045
+		animated_torso.position.y = 1.12 + (absf(gait) * 0.035 if walking else 0.0) - anticipation * 0.025 - swing * 0.065 + follow_through * 0.02
+		animated_torso.rotation.y = anticipation * -0.12 + swing * 0.18
 	if animated_cape != null:
-		animated_cape.rotation.x = sin(animation_time * 3.0) * 0.045 + (0.1 if walking else 0.0)
+		animated_cape.rotation.x = sin(animation_time * 3.0) * 0.045 + (0.1 if walking else 0.0) + anticipation * 0.12 - swing * 0.16 + follow_through * 0.08
 	for i in range(enemy_legs.size()):
 		enemy_legs[i].rotation.x = sin(animation_time * 7.0 + float(i % 4) * PI * 0.5) * 0.16
 	for i in range(enemy_tails.size()):
@@ -421,6 +435,15 @@ func _process(delta: float) -> void:
 	for i in range(enemies.size()):
 		var enemy := enemies[i]
 		if not is_instance_valid(enemy): continue
+		var hit_left: float = maxf(0.0, float(enemy_hit_timers.get(enemy, 0.0)) - delta)
+		enemy_hit_timers[enemy] = hit_left
+		enemy.rotation.z = lerpf(enemy.rotation.z, 0.0, minf(1.0, delta * 12.0))
+		if hit_left <= 0.0 and enemy.has_node("EnemyBody"):
+			var enemy_body := enemy.get_node("EnemyBody") as MeshInstance3D
+			var enemy_material := enemy_body.material_override as StandardMaterial3D
+			if enemy_material != null and enemy_base_colors.has(enemy):
+				enemy_material.albedo_color = enemy_base_colors[enemy]
+		if hit_left > 0.0: continue
 		var d := enemy.position.distance_to(player.position)
 		if d < 11.0 and d > 2.6:
 			var toward := (player.position - enemy.position).normalized()
@@ -447,7 +470,7 @@ func _attack() -> void:
 	attack_cooldown = 0.48
 	var target := _nearest_enemy()
 	if target != null:
-		_remove_enemy(target, 34)
+		_damage_enemy(target, 34)
 		status_label.text = "SWORD STRIKE  •  34 DAMAGE"
 	else:
 		status_label.text = "SWORD SWING  •  MOVE CLOSER"
@@ -459,19 +482,39 @@ func _skill() -> void:
 	skill_cooldown = 4.0
 	var target := _nearest_enemy()
 	if target != null:
-		_remove_enemy(target, 58)
+		_damage_enemy(target, 58)
 		status_label.text = "WARDEN CLEAVE  •  58 DAMAGE"
 	else:
 		status_label.text = "WARDEN CLEAVE  •  NO TARGET"
 	attack_flash = 0.32
 	attack_anim_time = ATTACK_ANIM_DURATION
 
-func _remove_enemy(enemy: Node3D, damage: int) -> void:
+func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	if not is_instance_valid(enemy): return
+	var remaining_hp: int = int(enemy_health.get(enemy, 75)) - damage
+	enemy_health[enemy] = remaining_hp
+	# Brief hit-stop-like feedback: a red flash, recoil, and a short interruption of pursuit.
+	var body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
+	if body != null:
+		var flash_material := body.material_override as StandardMaterial3D
+		if flash_material != null:
+			flash_material.albedo_color = Color("#e5a08c")
+	enemy_hit_timers[enemy] = ENEMY_HIT_REACTION_DURATION
+	var recoil := enemy.global_position - player.global_position
+	recoil.y = 0.0
+	if recoil.length_squared() > 0.001:
+		enemy.position += recoil.normalized() * 0.48
+	enemy.rotation.z = -0.2 if enemy.position.x < player.position.x else 0.2
+	if remaining_hp > 0:
+		status_label.text = "HIT  •  %d DAMAGE  •  %d HP LEFT" % [damage, remaining_hp]
+		return
 	kills += 1
 	xp += 12
 	coins += 5
 	enemies.erase(enemy)
+	enemy_health.erase(enemy)
+	enemy_hit_timers.erase(enemy)
+	enemy_base_colors.erase(enemy)
 	var burst := OmniLight3D.new()
 	burst.light_color = Color("#ffbf72")
 	burst.light_energy = 2.5
@@ -498,7 +541,7 @@ func _dodge() -> void:
 func _ultimate() -> void:
 	var target := _nearest_enemy()
 	if target != null:
-		_remove_enemy(target, 90)
+		_damage_enemy(target, 90)
 		status_label.text = "ANCIENT OATH  •  90 DAMAGE"
 	else:
 		status_label.text = "ANCIENT OATH  •  NO TARGET"
