@@ -32,6 +32,8 @@ var enemy_health: Dictionary = {}
 var enemy_hit_timers: Dictionary = {}
 var enemy_base_colors: Dictionary = {}
 var enemy_health_ui: Dictionary = {}
+var enemy_knockback: Dictionary = {}
+var health_bar_fade_effects: Array[Dictionary] = []
 var damage_number_effects: Array[Dictionary] = []
 var animated_sword: Node3D
 var animated_cape: Node3D
@@ -414,6 +416,25 @@ func _spawn_damage_number(enemy: Node3D, damage: int) -> void:
 	add_child(number)
 	damage_number_effects.append({"node": number, "age": 0.0, "duration": 0.72, "drift": Vector3(0.0, 1.15, 0.0)})
 
+func _update_health_bar_fades(delta: float) -> void:
+	for i in range(health_bar_fade_effects.size() - 1, -1, -1):
+		var item: Dictionary = health_bar_fade_effects[i]
+		var root := item.get("root") as Node3D
+		if not is_instance_valid(root):
+			health_bar_fade_effects.remove_at(i)
+			continue
+		var age := float(item.get("age", 0.0)) + delta
+		var duration := float(item.get("duration", 0.24))
+		item["age"] = age
+		health_bar_fade_effects[i] = item
+		if age >= duration:
+			root.queue_free()
+			health_bar_fade_effects.remove_at(i)
+			continue
+		var progress := clampf(age / duration, 0.0, 1.0)
+		root.scale = Vector3.ONE * (1.0 - progress) * (1.0 - progress)
+		root.position.y += delta * 0.45
+
 func _update_damage_numbers(delta: float) -> void:
 	for i in range(damage_number_effects.size() - 1, -1, -1):
 		var item: Dictionary = damage_number_effects[i]
@@ -561,6 +582,7 @@ func _process(delta: float) -> void:
 		magical_materials[i].emission_energy_multiplier = pulse * (1.25 if i < 3 else 0.8)
 	_update_combat_effects(delta)
 	_update_damage_numbers(delta)
+	_update_health_bar_fades(delta)
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	skill_cooldown = maxf(0.0, skill_cooldown - delta)
 	attack_flash = maxf(0.0, attack_flash - delta)
@@ -611,6 +633,12 @@ func _process(delta: float) -> void:
 		if not is_instance_valid(enemy): continue
 		var hit_left: float = maxf(0.0, float(enemy_hit_timers.get(enemy, 0.0)) - delta)
 		enemy_hit_timers[enemy] = hit_left
+		var knockback: Vector3 = enemy_knockback.get(enemy, Vector3.ZERO)
+		if knockback.length_squared() > 0.0004:
+			enemy.position += knockback * delta
+			enemy_knockback[enemy] = knockback.move_toward(Vector3.ZERO, 17.0 * delta)
+		else:
+			enemy_knockback.erase(enemy)
 		enemy.rotation.z = lerpf(enemy.rotation.z, 0.0, minf(1.0, delta * 12.0))
 		if enemy_health_ui.has(enemy):
 			var display: Dictionary = enemy_health_ui[enemy]
@@ -772,19 +800,19 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	enemy_health[enemy] = remaining_hp
 	_spawn_damage_number(enemy, damage)
 	_update_enemy_health_ui(enemy)
-	# Brief hit-stop-like feedback: a red flash, recoil, and a short interruption of pursuit.
+	# Stronger readable impact: brief flash, stagger, and a damped physical-looking shove.
 	var body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
 	if body != null:
 		var flash_material := body.material_override as StandardMaterial3D
 		if flash_material != null:
-			flash_material.albedo_color = Color("#e5a08c")
+			flash_material.albedo_color = Color("#ffd0ad")
 	enemy_hit_timers[enemy] = ENEMY_HIT_REACTION_DURATION
 	_spawn_combat_effect("hit", enemy.position + Vector3(0.0, 0.9, 0.0))
 	var recoil := enemy.global_position - player.global_position
 	recoil.y = 0.0
 	if recoil.length_squared() > 0.001:
-		enemy.position += recoil.normalized() * 0.48
-	enemy.rotation.z = -0.2 if enemy.position.x < player.position.x else 0.2
+		enemy_knockback[enemy] = recoil.normalized() * 4.2
+	enemy.rotation.z = -0.28 if enemy.position.x < player.position.x else 0.28
 	if remaining_hp > 0:
 		status_label.text = "HIT  •  %d DAMAGE  •  %d HP LEFT" % [damage, remaining_hp]
 		return
@@ -794,8 +822,15 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	enemies.erase(enemy)
 	enemy_health.erase(enemy)
 	enemy_hit_timers.erase(enemy)
+	enemy_knockback.erase(enemy)
 	enemy_base_colors.erase(enemy)
-	enemy_health_ui.erase(enemy)
+	if enemy_health_ui.has(enemy):
+		var display: Dictionary = enemy_health_ui[enemy]
+		var display_root := display.get("root") as Node3D
+		if is_instance_valid(display_root):
+			display_root.reparent(self, true)
+			health_bar_fade_effects.append({"root": display_root, "age": 0.0, "duration": 0.24})
+		enemy_health_ui.erase(enemy)
 	_spawn_combat_effect("death", enemy.position + Vector3(0.0, 0.04, 0.0))
 	enemy.queue_free()
 	if target_label != null:
