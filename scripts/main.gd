@@ -2157,9 +2157,10 @@ func _draw_hud() -> void:
 				boss_bar_color = boss_bar_color.lerp(Color("#fff0b0"), 0.22 + 0.12 * sin(elapsed * 7.0))
 			draw_rect(Rect2(456, 35, 368.0 * boss_hp_ratio, 14), boss_bar_color)
 			draw_rect(Rect2(456, 35, 368, 14), boss_color.lightened(0.2), false, 1.5)
-			for phase_mark in [0.25, 0.5, 0.75]:
-				var mark_x: float = 456.0 + 368.0 * float(phase_mark)
-				draw_line(Vector2(mark_x, 33), Vector2(mark_x, 51), Color("#f3e8d0", 0.9), 2.0, true)
+			# Draw phase markers directly to avoid allocating a temporary array every frame.
+			draw_line(Vector2(548.0, 33), Vector2(548.0, 51), Color("#f3e8d0", 0.9), 2.0, true)
+			draw_line(Vector2(640.0, 33), Vector2(640.0, 51), Color("#f3e8d0", 0.9), 2.0, true)
+			draw_line(Vector2(732.0, 33), Vector2(732.0, 51), Color("#f3e8d0", 0.9), 2.0, true)
 			draw_string(ThemeDB.fallback_font, Vector2(828, 64), "%d%%" % roundi(boss_hp_ratio * 100.0), HORIZONTAL_ALIGNMENT_RIGHT, 42, 11, Color("#e7dfc8"))
 			break
 	draw_rect(Rect2(22, 20, 350, 106), Color(0.035, 0.055, 0.05, 0.9))
