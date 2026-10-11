@@ -818,7 +818,17 @@ func _process(delta: float) -> void:
 	if hp_bar != null:
 		hp_bar.value = player_hp
 	if status_label != null:
-		status_label.text = ("ATTACK READY" if attack_cooldown <= 0 else "ATTACK  %.1fs" % attack_cooldown) + "     •     " + ("SKILL READY" if skill_cooldown <= 0 else "SKILL  %.1fs" % skill_cooldown)
+		var combat_status := ("ATTACK READY" if attack_cooldown <= 0 else "ATTACK  %.1fs" % attack_cooldown) + "     •     " + ("SKILL READY" if skill_cooldown <= 0 else "SKILL  %.1fs" % skill_cooldown)
+		for boss in enemies:
+			if is_instance_valid(boss) and boss.name == "FrostWarden" and frost_warden_states.has(boss):
+				var boss_state: Dictionary = frost_warden_states[boss]
+				var windup_left := float(boss_state.get("windup", 0.0))
+				if windup_left > 0.0:
+					combat_status = "FROST NOVA INCOMING  •  DODGE NOW  •  %.1fs" % windup_left
+				elif float(boss_state.get("cooldown", 0.0)) > 0.0:
+					combat_status += "     •     FROST WARDEN ACTIVE"
+				break
+		status_label.text = combat_status
 
 func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 	if not frost_warden_states.has(enemy):
@@ -837,6 +847,10 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 		var core := enemy.get_node_or_null("FrostCore") as MeshInstance3D
 		if core != null:
 			core.scale = Vector3(0.48, 0.58, 0.32) if phase == 2 else (Vector3(0.38, 0.48, 0.26) if phase == 1 else Vector3(0.32, 0.42, 0.22))
+		if body != null:
+			var phase_material := body.material_override as StandardMaterial3D
+			if phase_material != null:
+				enemy_base_colors[enemy] = phase_material.albedo_color
 		if status_label != null:
 			status_label.text = "FROST WARDEN ENRAGED  •  PHASE III" if phase == 2 else "FROST WARDEN AWAKENS  •  PHASE II"
 	var windup := float(state.get("windup", 0.0))
