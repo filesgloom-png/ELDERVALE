@@ -3,8 +3,8 @@ config_version=5
 
 [application]
 config/name="ELDERVALE"
-config/description="A performance-first top-down dark fantasy RPG."
-run/main_scene="res://scenes/main.tscn"
+config/description="A third-person 3D dark fantasy action RPG for Android."
+run/main_scene="res://scenes/main_3d.tscn"
 
 [display]
 window/size/viewport_width=1280
