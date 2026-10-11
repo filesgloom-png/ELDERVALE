@@ -48,6 +48,7 @@ var enemy_base_colors: Dictionary = {}
 var enemy_health_ui: Dictionary = {}
 var enemy_knockback: Dictionary = {}
 var enemy_recovery_animations: Dictionary = {}
+var frost_warden_states: Dictionary = {}
 var health_bar_fade_effects: Array[Dictionary] = []
 var damage_number_effects: Array[Dictionary] = []
 var animated_sword: Node3D
@@ -433,6 +434,8 @@ func _build_enemies() -> void:
 		enemies.append(enemy)
 		enemy_health[enemy] = 650 if i == 4 else (75 if i < 3 else 110)
 		enemy_hit_timers[enemy] = 0.0
+		if enemy.name == "FrostWarden":
+			frost_warden_states[enemy] = {"cooldown": 2.8, "windup": 0.0, "marker": null, "target": Vector3.ZERO, "phase": 0}
 		enemy_base_colors[enemy] = hide_mat.albedo_color
 		_create_enemy_health_ui(enemy)
 
@@ -805,6 +808,8 @@ func _process(delta: float) -> void:
 			if enemy_material != null and enemy_base_colors.has(enemy):
 				enemy_material.albedo_color = enemy_base_colors[enemy]
 		if hit_left > 0.0: continue
+		if enemy.name == "FrostWarden":
+			_update_frost_warden_combat(enemy, delta)
 		var d := enemy.position.distance_to(player.position)
 		if d < 11.0 and d > 2.6:
 			var toward := (player.position - enemy.position).normalized()
@@ -814,6 +819,91 @@ func _process(delta: float) -> void:
 		hp_bar.value = player_hp
 	if status_label != null:
 		status_label.text = ("ATTACK READY" if attack_cooldown <= 0 else "ATTACK  %.1fs" % attack_cooldown) + "     •     " + ("SKILL READY" if skill_cooldown <= 0 else "SKILL  %.1fs" % skill_cooldown)
+
+func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
+	if not frost_warden_states.has(enemy):
+		frost_warden_states[enemy] = {"cooldown": 2.8, "windup": 0.0, "marker": null, "target": Vector3.ZERO, "phase": 0}
+	var state: Dictionary = frost_warden_states[enemy]
+	var hp_ratio := float(enemy_health.get(enemy, 650)) / 650.0
+	var phase := 2 if hp_ratio <= 0.30 else (1 if hp_ratio <= 0.65 else 0)
+	if phase != int(state.get("phase", 0)):
+		state["phase"] = phase
+		var body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
+		if body != null:
+			var material := body.material_override as StandardMaterial3D
+			if material != null:
+				material.albedo_color = Color("#a4faff") if phase == 2 else (Color("#61cbd8") if phase == 1 else Color("#7edbd9"))
+				material.emission_energy_multiplier = 1.1 if phase == 2 else (0.8 if phase == 1 else 0.65)
+		var core := enemy.get_node_or_null("FrostCore") as MeshInstance3D
+		if core != null:
+			core.scale = Vector3(0.48, 0.58, 0.32) if phase == 2 else (Vector3(0.38, 0.48, 0.26) if phase == 1 else Vector3(0.32, 0.42, 0.22))
+		if status_label != null:
+			status_label.text = "FROST WARDEN ENRAGED  •  PHASE III" if phase == 2 else "FROST WARDEN AWAKENS  •  PHASE II"
+	var windup := float(state.get("windup", 0.0))
+	if windup > 0.0:
+		windup -= delta
+		state["windup"] = windup
+		if windup <= 0.0:
+			var marker := state.get("marker") as Node3D
+			if is_instance_valid(marker):
+				marker.queue_free()
+			state["marker"] = null
+			var target: Vector3 = state.get("target", Vector3.ZERO)
+			var radius := 3.45 if phase == 2 else (3.0 if phase == 1 else 2.55)
+			if player.position.distance_to(target) <= radius:
+				var damage := 42 if phase == 2 else (34 if phase == 1 else 26)
+				_take_frost_damage(damage)
+				_spawn_combat_effect("hit", player.position + Vector3(0.0, 0.08, 0.0))
+			elif status_label != null:
+				status_label.text = "FROST NOVA MISSED  •  GOOD DODGE"
+		frost_warden_states[enemy] = state
+		return
+	var cooldown := float(state.get("cooldown", 2.8)) - delta
+	if cooldown <= 0.0:
+		var target := player.position
+		state["target"] = target
+		state["windup"] = 1.2 if phase == 0 else (0.95 if phase == 1 else 0.72)
+		state["cooldown"] = 5.1 if phase == 0 else (3.9 if phase == 1 else 2.75)
+		var warning := MeshInstance3D.new()
+		warning.name = "FrostNovaTelegraph"
+		var disk := CylinderMesh.new()
+		disk.top_radius = 2.55 if phase == 0 else (3.0 if phase == 1 else 3.45)
+		disk.bottom_radius = disk.top_radius
+		disk.height = 0.055
+		warning.mesh = disk
+		var warning_material := _mat(Color(0.22, 0.82, 0.94, 0.42), 0.35, 0.2)
+		warning_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		warning_material.emission_enabled = true
+		warning_material.emission = Color("#43e8ff")
+		warning_material.emission_energy_multiplier = 1.15
+		warning.material_override = warning_material
+		warning.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		warning.position = Vector3(target.x, 0.07, target.z)
+		add_child(warning)
+		state["marker"] = warning
+		if status_label != null:
+			status_label.text = "FROST NOVA INCOMING  •  DODGE THE CYAN ZONE"
+	else:
+		state["cooldown"] = cooldown
+	frost_warden_states[enemy] = state
+
+func _take_frost_damage(amount: int) -> void:
+	var mitigation := mini(12, armor_level * 3)
+	var damage := maxi(8, amount - mitigation)
+	player_hp = maxi(0, player_hp - damage)
+	if player_hp <= 0:
+		coins = maxi(0, coins - 25)
+		player_hp = player_max_hp
+		player.position = Vector3(0.0, 0.0, 3.0)
+		if status_label != null:
+			status_label.text = "WARDEN DOWN  •  -25 COINS  •  RETURNED TO THE CAMP"
+	else:
+		if status_label != null:
+			status_label.text = "FROST NOVA HIT  •  -%d HP  •  ARMOR BLOCKED %d" % [damage, mitigation]
+	if hp_bar != null:
+		hp_bar.value = player_hp
+	_refresh_progression_ui()
+	_save_progress()
 
 func _spawn_combat_effect(kind: String, origin: Variant = null) -> void:
 	if player == null:
@@ -1000,6 +1090,12 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	enemy_knockback.erase(enemy)
 	enemy_recovery_animations.erase(enemy)
 	enemy_base_colors.erase(enemy)
+	if frost_warden_states.has(enemy):
+		var boss_state: Dictionary = frost_warden_states[enemy]
+		var warning_marker := boss_state.get("marker") as Node3D
+		if is_instance_valid(warning_marker):
+			warning_marker.queue_free()
+		frost_warden_states.erase(enemy)
 	if enemy_health_ui.has(enemy):
 		var display: Dictionary = enemy_health_ui[enemy]
 		var display_root := display.get("root") as Node3D
@@ -1111,6 +1207,9 @@ func _refresh_progression_ui() -> void:
 		lines.append("ARMOR: 3 Pelts + 2 Cores + 35 coins")
 		lines.append("ELITE DROP: Warden Emblem  •  25%")
 		lines.append("FROST WARDEN: every 3rd wave  •  650 HP")
+		lines.append("BOSS PHASES: 65% / 30% HP  •  FROST NOVA TELEGRAPH")
+		lines.append("DODGE: leave the cyan danger zone before impact")
+		lines.append("ARMOR reduces Frost Nova damage by up to 12")
 		lines.append("BOSS REWARD: Frost Sigil + 300 coins + 350 XP")
 		lines.append("")
 		lines.append("STORY QUEST")
@@ -1218,6 +1317,7 @@ func _save_progress() -> void:
 	save.set_value("quest", "progress", quest_stage_progress)
 	save.set_value("quest", "completed", quest_completed)
 	save.set_value("codex", "discoveries", codex_discoveries)
+	save.set_value("world", "wave_number", wave_number)
 	save.save("user://eldervale_progress.cfg")
 
 func _load_progress() -> void:
@@ -1237,6 +1337,7 @@ func _load_progress() -> void:
 	quest_stage = clampi(int(save.get_value("quest", "stage", quest_stage)), 0, 4)
 	quest_stage_progress = maxi(0, int(save.get_value("quest", "progress", quest_stage_progress)))
 	quest_completed = bool(save.get_value("quest", "completed", quest_completed))
+	wave_number = maxi(0, int(save.get_value("world", "wave_number", wave_number)))
 	if quest_completed and quest_stage == 3:
 		quest_stage = 4
 	player_max_hp = 148 + armor_level * 18
