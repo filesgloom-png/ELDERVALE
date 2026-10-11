@@ -954,10 +954,10 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 			state["recovery"] = 0.42
 			enemy.rotation.z = 0.24 if phase == 2 else 0.16
 			var attack := str(state.get("attack", "nova"))
-			var impact_kind := "frost_nova_burst" if attack == "nova" else ("frost_lance_burst" if attack == "lance" else "frost_shatter_burst")
-			_spawn_combat_effect(impact_kind, (target if attack == "nova" else origin) + Vector3(0.0, 0.04, 0.0))
 			var target: Vector3 = state.get("target", Vector3.ZERO)
 			var origin: Vector3 = state.get("origin", enemy.position)
+			var impact_kind := "frost_nova_burst" if attack == "nova" else ("frost_lance_burst" if attack == "lance" else "frost_shatter_burst")
+			_spawn_combat_effect(impact_kind, (target if attack == "nova" else origin) + Vector3(0.0, 0.04, 0.0))
 			var hit := false
 			var damage := 0
 			if attack == "nova":
