@@ -658,8 +658,8 @@ func _process(delta: float) -> void:
 			if recovery_head != null:
 				var base_head_position: Vector3 = recovery.get("head_position", Vector3(0.0, 1.25, -0.3))
 				var base_head_rotation: Vector3 = recovery.get("head_rotation", Vector3.ZERO)
-				recovery_head.position = base_head_position + Vector3(0.0, -0.07, 0.04) * recovery_pulse * impact_strength
-				recovery_head.rotation = base_head_rotation + Vector3(0.15 * recovery_pulse * impact_strength, 0.0, 0.0)
+				recovery_head.position = base_head_position + Vector3(0.045 * impact_direction, -0.07, 0.04) * recovery_pulse * impact_strength
+				recovery_head.rotation = base_head_rotation + Vector3(0.15 * recovery_pulse * impact_strength, 0.0, -0.08 * impact_direction * recovery_pulse * impact_strength)
 			if recovery_age >= recovery_duration:
 				if recovery_body != null:
 					recovery_body.scale = recovery.get("body_scale", Vector3(0.72, 0.58, 0.55))
@@ -841,22 +841,28 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 			flash_material.albedo_color = Color("#ffd0ad")
 		var impact_strength := clampf(float(damage) / 90.0, 0.4, 1.0)
 		var impact_direction := -1.0 if enemy.position.x < player.position.x else 1.0
+		var recovery: Dictionary = enemy_recovery_animations.get(enemy, {})
+		if not recovery.is_empty():
+			impact_strength = maxf(impact_strength, float(recovery.get("strength", 0.4)))
 		enemy_recovery_animations[enemy] = {
 			"age": 0.0,
 			"duration": 0.32,
 			"strength": impact_strength,
 			"direction": impact_direction,
-			"body_scale": body.scale,
-			"body_rotation": body.rotation,
-			"head_position": head.position if head != null else Vector3(0.0, 1.25, -0.3),
-			"head_rotation": head.rotation if head != null else Vector3.ZERO
+			"body_scale": recovery.get("body_scale", body.scale),
+			"body_rotation": recovery.get("body_rotation", body.rotation),
+			"head_position": recovery.get("head_position", head.position if head != null else Vector3(0.0, 1.25, -0.3)),
+			"head_rotation": recovery.get("head_rotation", head.rotation if head != null else Vector3.ZERO)
 		}
 	enemy_hit_timers[enemy] = ENEMY_HIT_REACTION_DURATION
 	_spawn_combat_effect("hit", enemy.position + Vector3(0.0, 0.9, 0.0))
 	var recoil := enemy.global_position - player.global_position
 	recoil.y = 0.0
 	if recoil.length_squared() > 0.001:
-		enemy_knockback[enemy] = recoil.normalized() * 4.2
+		var hit_push := recoil.normalized() * 4.2
+		var existing_push: Vector3 = enemy_knockback.get(enemy, Vector3.ZERO)
+		var combined_push := hit_push + existing_push * 0.45
+		enemy_knockback[enemy] = combined_push.limit_length(5.2)
 	enemy.rotation.z = -0.28 if enemy.position.x < player.position.x else 0.28
 	if remaining_hp > 0:
 		status_label.text = "HIT  •  %d DAMAGE  •  %d HP LEFT" % [damage, remaining_hp]
