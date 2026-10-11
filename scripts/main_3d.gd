@@ -1095,6 +1095,7 @@ func _craft_weapon() -> void:
 	inventory["Ashen Pelt"] = int(inventory["Ashen Pelt"]) - 2
 	coins -= 35
 	weapon_level += 1
+	_refresh_equipment_visuals()
 	status_label.text = "ASHEN BLADE FORGED  •  LEVEL %d  •  +%d ATTACK" % [weapon_level, weapon_level * 9]
 	_refresh_progression_ui()
 	_save_progress()
@@ -1196,6 +1197,8 @@ func _load_progress() -> void:
 	quest_stage = clampi(int(save.get_value("quest", "stage", quest_stage)), 0, 4)
 	quest_stage_progress = maxi(0, int(save.get_value("quest", "progress", quest_stage_progress)))
 	quest_completed = bool(save.get_value("quest", "completed", quest_completed))
+	if quest_completed and quest_stage == 3:
+		quest_stage = 4
 	player_max_hp = 148 + armor_level * 18
 	player_hp = mini(player_hp, player_max_hp)
 	var saved_discoveries: Variant = save.get_value("codex", "discoveries", [])
