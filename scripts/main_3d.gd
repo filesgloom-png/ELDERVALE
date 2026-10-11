@@ -23,7 +23,8 @@ var xp_to_next_level := 190
 var stats_label: Label
 var inventory_label: Label
 var inventory_panel: PanelContainer
-var inventory: Dictionary = {"Ashen Pelt": 0, "Ancient Shard": 0, "Echo Fragment": 0, "Ruin Core": 0, "Warden Emblem": 0, "Frost Sigil": 0}
+var inventory: Dictionary = {"Ashen Pelt": 0, "Ancient Shard": 0, "Echo Fragment": 0, "Ruin Core": 0, "Warden Emblem": 0, "Frost Sigil": 0, "Glacial Crown": 0}
+var boss_first_kill_claimed := false
 var codex_discoveries: Array[String] = []
 var weapon_level := 0
 var armor_level := 0
@@ -34,6 +35,9 @@ var wave_respawn_timer := -1.0
 var wave_number := 0
 var enemies: Array[Node3D] = []
 var hp_bar: ProgressBar
+var boss_hp_bar: ProgressBar
+var boss_panel: PanelContainer
+var boss_phase_label: Label
 var status_label: Label
 var target_label: Label
 var world_time := 0.0
@@ -435,7 +439,7 @@ func _build_enemies() -> void:
 		enemy_health[enemy] = 650 if i == 4 else (75 if i < 3 else 110)
 		enemy_hit_timers[enemy] = 0.0
 		if enemy.name == "FrostWarden":
-			frost_warden_states[enemy] = {"cooldown": 2.8, "windup": 0.0, "marker": null, "target": Vector3.ZERO, "phase": 0}
+			frost_warden_states[enemy] = {"cooldown": 2.8, "windup": 0.0, "marker": null, "target": Vector3.ZERO, "origin": enemy.position, "phase": 0, "attack": "nova", "next_attack": 0}
 		enemy_base_colors[enemy] = hide_mat.albedo_color
 		_create_enemy_health_ui(enemy)
 
@@ -466,6 +470,8 @@ func _create_enemy_health_ui(enemy: Node3D) -> void:
 	root.add_child(name_tag)
 	enemy_health_ui[enemy] = {"root": root, "fill": fill, "material": fill_material}
 	_update_enemy_health_ui(enemy)
+	if enemy.name == "FrostWarden":
+		_update_boss_hud(enemy)
 
 func _update_enemy_health_ui(enemy: Node3D) -> void:
 	if not enemy_health_ui.has(enemy):
@@ -480,6 +486,27 @@ func _update_enemy_health_ui(enemy: Node3D) -> void:
 	fill.scale.x = ratio
 	fill.position.x = -0.03 - 0.47 * (1.0 - ratio)
 	material.albedo_color = Color("#72bd70") if ratio > 0.55 else (Color("#e0b45f") if ratio > 0.25 else Color("#d9685c"))
+
+func _update_boss_hud(enemy: Node3D) -> void:
+	if boss_panel == null or boss_hp_bar == null or boss_phase_label == null:
+		return
+	var hp := clampi(int(enemy_health.get(enemy, 0)), 0, 650)
+	var phase := "PHASE III  •  ENRAGED" if hp <= 195 else ("PHASE II  •  AWAKENED" if hp <= 422 else "PHASE I  •  DORMANT")
+	boss_panel.visible = hp > 0
+	boss_hp_bar.value = hp
+	boss_phase_label.text = "FROST WARDEN   %d / 650 HP   •   %s" % [hp, phase]
+	boss_hp_bar.add_theme_stylebox_override("fill", _hud_bar_style(Color("#74e9f2") if hp > 422 else (Color("#4db8d3") if hp > 195 else Color("#b77be8"))))
+
+func _refresh_boss_hud() -> void:
+	var boss: Node3D = null
+	for candidate in enemies:
+		if is_instance_valid(candidate) and candidate.name == "FrostWarden":
+			boss = candidate
+			break
+	if boss != null:
+		_update_boss_hud(boss)
+	elif boss_panel != null:
+		boss_panel.visible = false
 
 func _spawn_damage_number(enemy: Node3D, damage: int) -> void:
 	var number := Label3D.new()
@@ -575,6 +602,35 @@ func _build_hud() -> void:
 	status_label.add_theme_font_size_override("font_size", 18)
 	status_label.add_theme_color_override("font_color", Color("#e7d5ac"))
 	layer.add_child(status_label)
+	boss_panel = PanelContainer.new()
+	boss_panel.name = "FrostWardenBossHUD"
+	boss_panel.position = Vector2(300, 64)
+	boss_panel.custom_minimum_size = Vector2(480, 56)
+	boss_panel.visible = false
+	var boss_style := StyleBoxFlat.new()
+	boss_style.bg_color = Color(0.025, 0.075, 0.09, 0.92)
+	boss_style.border_color = Color("#5fdde8")
+	boss_style.set_border_width_all(2)
+	boss_style.set_corner_radius_all(7)
+	boss_panel.add_theme_stylebox_override("panel", boss_style)
+	layer.add_child(boss_panel)
+	var boss_stack := VBoxContainer.new()
+	boss_stack.add_theme_constant_override("separation", 2)
+	boss_panel.add_child(boss_stack)
+	boss_phase_label = Label.new()
+	boss_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boss_phase_label.add_theme_font_size_override("font_size", 14)
+	boss_phase_label.add_theme_color_override("font_color", Color("#b7f8ff"))
+	boss_stack.add_child(boss_phase_label)
+	boss_hp_bar = ProgressBar.new()
+	boss_hp_bar.custom_minimum_size = Vector2(450, 14)
+	boss_hp_bar.min_value = 0
+	boss_hp_bar.max_value = 650
+	boss_hp_bar.value = 650
+	boss_hp_bar.show_percentage = false
+	boss_hp_bar.add_theme_stylebox_override("background", _hud_bar_style(Color("#172b33")))
+	boss_hp_bar.add_theme_stylebox_override("fill", _hud_bar_style(Color("#74e9f2")))
+	boss_stack.add_child(boss_hp_bar)
 	target_label = Label.new()
 	target_label.position = Vector2(18, 130)
 	target_label.size = Vector2(300, 24)
@@ -817,6 +873,7 @@ func _process(delta: float) -> void:
 			enemy.rotation.y = atan2(-toward.x, -toward.z)
 	if hp_bar != null:
 		hp_bar.value = player_hp
+	_refresh_boss_hud()
 	if status_label != null:
 		var combat_status := ("ATTACK READY" if attack_cooldown <= 0 else "ATTACK  %.1fs" % attack_cooldown) + "     •     " + ("SKILL READY" if skill_cooldown <= 0 else "SKILL  %.1fs" % skill_cooldown)
 		for boss in enemies:
@@ -831,6 +888,123 @@ func _process(delta: float) -> void:
 		status_label.text = combat_status
 
 func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
+	if not frost_warden_states.has(enemy):
+		frost_warden_states[enemy] = {"cooldown": 2.8, "windup": 0.0, "marker": null, "target": Vector3.ZERO, "origin": enemy.position, "phase": 0, "attack": "nova", "next_attack": 0}
+	var state: Dictionary = frost_warden_states[enemy]
+	var hp_ratio := float(enemy_health.get(enemy, 650)) / 650.0
+	var phase := 2 if hp_ratio <= 0.30 else (1 if hp_ratio <= 0.65 else 0)
+	if phase != int(state.get("phase", 0)):
+		state["phase"] = phase
+		var body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
+		if body != null:
+			var material := body.material_override as StandardMaterial3D
+			if material != null:
+				material.albedo_color = Color("#a4faff") if phase == 2 else (Color("#61cbd8") if phase == 1 else Color("#7edbd9"))
+				material.emission_energy_multiplier = 1.1 if phase == 2 else (0.8 if phase == 1 else 0.65)
+		var core := enemy.get_node_or_null("FrostCore") as MeshInstance3D
+		if core != null:
+			core.scale = Vector3(0.48, 0.58, 0.32) if phase == 2 else (Vector3(0.38, 0.48, 0.26) if phase == 1 else Vector3(0.32, 0.42, 0.22))
+		if body != null:
+			var phase_material := body.material_override as StandardMaterial3D
+			if phase_material != null:
+				enemy_base_colors[enemy] = phase_material.albedo_color
+		if status_label != null:
+			status_label.text = "FROST WARDEN ENRAGED  •  PHASE III" if phase == 2 else "FROST WARDEN AWAKENS  •  PHASE II"
+	_update_boss_hud(enemy)
+	var windup := float(state.get("windup", 0.0))
+	if windup > 0.0:
+		windup -= delta
+		state["windup"] = windup
+		if windup <= 0.0:
+			var marker := state.get("marker") as Node3D
+			if is_instance_valid(marker):
+				marker.queue_free()
+			state["marker"] = null
+			var attack := str(state.get("attack", "nova"))
+			var target: Vector3 = state.get("target", Vector3.ZERO)
+			var origin: Vector3 = state.get("origin", enemy.position)
+			var hit := false
+			var damage := 0
+			if attack == "nova":
+				var radius := 3.45 if phase == 2 else (3.0 if phase == 1 else 2.55)
+				hit = player.position.distance_to(target) <= radius
+				damage = 42 if phase == 2 else (34 if phase == 1 else 26)
+			elif attack == "lance":
+				hit = _player_in_ice_lance(enemy.position, target)
+				damage = 35 if phase == 2 else (28 if phase == 1 else 22)
+			else:
+				var ring_radius := 4.8 if phase == 2 else (4.2 if phase == 1 else 3.6)
+				hit = player.position.distance_to(enemy.position) <= ring_radius
+				damage = 38 if phase == 2 else (30 if phase == 1 else 24)
+			if hit:
+				_take_frost_damage(damage)
+				_spawn_combat_effect("hit", player.position + Vector3(0.0, 0.08, 0.0))
+			elif status_label != null:
+				status_label.text = "FROST ATTACK EVADED  •  GOOD DODGE"
+		frost_warden_states[enemy] = state
+		return
+	var cooldown := float(state.get("cooldown", 2.8)) - delta
+	if cooldown <= 0.0:
+		var next_attack := int(state.get("next_attack", 0))
+		var attack := "nova" if next_attack % 3 == 0 else ("lance" if next_attack % 3 == 1 else "shatter")
+		state["next_attack"] = next_attack + 1
+		var target := player.position
+		var origin := enemy.position
+		state["target"] = target
+		state["origin"] = origin
+		state["attack"] = attack
+		state["windup"] = (1.2 if phase == 0 else (0.95 if phase == 1 else 0.72)) if attack == "nova" else ((1.35 if phase == 0 else (1.05 if phase == 1 else 0.82)) if attack == "lance" else (1.1 if phase == 0 else (0.9 if phase == 1 else 0.68)))
+		state["cooldown"] = (5.1 if phase == 0 else (3.9 if phase == 1 else 2.75))
+		var warning := MeshInstance3D.new()
+		warning.name = "FrostTelegraph_" + attack
+		var warning_material := _mat(Color(0.22, 0.82, 0.94, 0.42), 0.35, 0.2)
+		warning_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		warning_material.emission_enabled = true
+		warning_material.emission = Color("#43e8ff")
+		warning_material.emission_energy_multiplier = 1.15
+		warning.material_override = warning_material
+		warning.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if attack == "lance":
+			var line := BoxMesh.new()
+			var distance := maxf(2.0, Vector2(target.x - origin.x, target.z - origin.z).length())
+			line.size = Vector3(1.65, 0.055, distance)
+			warning.mesh = line
+			warning.position = Vector3((origin.x + target.x) * 0.5, 0.075, (origin.z + target.z) * 0.5)
+			warning.rotation.y = atan2(target.x - origin.x, target.z - origin.z)
+		elif attack == "shatter":
+			var ring := TorusMesh.new()
+			ring.inner_radius = 2.8 if phase == 0 else (3.4 if phase == 1 else 4.0)
+			ring.outer_radius = ring.inner_radius + 0.55
+			ring.rings = 5
+			ring.ring_segments = 20
+			warning.mesh = ring
+			warning.position = Vector3(origin.x, 0.09, origin.z)
+		else:
+			var disk := CylinderMesh.new()
+			disk.top_radius = 2.55 if phase == 0 else (3.0 if phase == 1 else 3.45)
+			disk.bottom_radius = disk.top_radius
+			disk.height = 0.055
+			warning.mesh = disk
+			warning.position = Vector3(target.x, 0.07, target.z)
+		add_child(warning)
+		state["marker"] = warning
+		if status_label != null:
+			status_label.text = "FROST NOVA  •  DODGE THE CYAN ZONE" if attack == "nova" else ("ICE LANCE  •  LEAVE THE LINE" if attack == "lance" else "SHATTER RING  •  ESCAPE THE BOSS")
+	else:
+		state["cooldown"] = cooldown
+	frost_warden_states[enemy] = state
+
+func _player_in_ice_lance(origin: Vector3, target: Vector3) -> bool:
+	var start := Vector2(origin.x, origin.z)
+	var finish := Vector2(target.x, target.z)
+	var point := Vector2(player.position.x, player.position.z)
+	var segment := finish - start
+	if segment.length_squared() < 0.01:
+		return point.distance_to(start) <= 1.15
+	var t := clampf((point - start).dot(segment) / segment.length_squared(), 0.0, 1.0)
+	return point.distance_to(start + segment * t) <= 1.15
+
+func _take_frost_damage(amount: int) -> void:
 	if not frost_warden_states.has(enemy):
 		frost_warden_states[enemy] = {"cooldown": 2.8, "windup": 0.0, "marker": null, "target": Vector3.ZERO, "phase": 0}
 	var state: Dictionary = frost_warden_states[enemy]
@@ -1163,6 +1337,15 @@ func _roll_enemy_loot(enemy: Node3D) -> void:
 		gained.append_array(["Warden Emblem", "Frost Sigil", "Echo Fragment ×4", "Ruin Core ×3"])
 		coins += 300
 		_gain_xp(350)
+		if not boss_first_kill_claimed:
+			boss_first_kill_claimed = true
+			inventory["Glacial Crown"] = int(inventory.get("Glacial Crown", 0)) + 1
+			coins += 500
+			_gain_xp(600)
+			if not codex_discoveries.has("Frost Warden Slain"):
+				codex_discoveries.append("Frost Warden Slain")
+			gained.append("GLACIAL CROWN  •  FIRST KILL RELIC")
+			status_label.text = "FIRST WARDEN SLAIN  •  GLACIAL CROWN +500 COINS +600 XP"
 	elif enemy.name == "AshWolf":
 		if rng.randf() <= 0.48:
 			inventory["Ashen Pelt"] = int(inventory.get("Ashen Pelt", 0)) + 1
@@ -1211,7 +1394,7 @@ func _refresh_progression_ui() -> void:
 		stats_label.text = "HP %d/%d    LV. %d    XP %d/%d    COINS %d" % [player_hp, player_max_hp, player_level, xp, xp_to_next_level, coins]
 	if inventory_label != null:
 		var lines: Array[String] = []
-		for item_name in ["Ashen Pelt", "Ancient Shard", "Echo Fragment", "Ruin Core", "Warden Emblem", "Frost Sigil"]:
+		for item_name in ["Ashen Pelt", "Ancient Shard", "Echo Fragment", "Ruin Core", "Warden Emblem", "Frost Sigil", "Glacial Crown"]:
 			lines.append("%s  × %d" % [item_name, int(inventory.get(item_name, 0))])
 		lines.append("")
 		lines.append("EQUIPMENT")
@@ -1225,6 +1408,8 @@ func _refresh_progression_ui() -> void:
 		lines.append("DODGE: leave the cyan danger zone before impact")
 		lines.append("ARMOR reduces Frost Nova damage by up to 12")
 		lines.append("BOSS REWARD: Frost Sigil + 300 coins + 350 XP")
+		lines.append("FIRST KILL: Glacial Crown + 500 coins + 600 XP")
+		lines.append("BOSS ATTACKS: Frost Nova / Ice Lance / Shatter Ring")
 		lines.append("")
 		lines.append("STORY QUEST")
 		lines.append(_quest_description())
@@ -1331,6 +1516,7 @@ func _save_progress() -> void:
 	save.set_value("quest", "progress", quest_stage_progress)
 	save.set_value("quest", "completed", quest_completed)
 	save.set_value("codex", "discoveries", codex_discoveries)
+	save.set_value("boss", "first_kill_claimed", boss_first_kill_claimed)
 	save.set_value("world", "wave_number", wave_number)
 	save.save("user://eldervale_progress.cfg")
 
@@ -1352,6 +1538,7 @@ func _load_progress() -> void:
 	quest_stage_progress = maxi(0, int(save.get_value("quest", "progress", quest_stage_progress)))
 	quest_completed = bool(save.get_value("quest", "completed", quest_completed))
 	wave_number = maxi(0, int(save.get_value("world", "wave_number", wave_number)))
+	boss_first_kill_claimed = bool(save.get_value("boss", "first_kill_claimed", boss_first_kill_claimed))
 	if quest_completed and quest_stage == 3:
 		quest_stage = 4
 	player_max_hp = 148 + armor_level * 18
