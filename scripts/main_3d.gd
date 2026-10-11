@@ -1126,7 +1126,19 @@ func _spawn_combat_effect(kind: String, origin: Variant = null) -> void:
 			var trail := _box(effect_root, Vector3(0.09, 0.08, 1.0), glow, Vector3(0.0, 0.42 + float(i) * 0.24, 0.45 + float(i) * 0.32), "DodgeAfterimage")
 			trail.rotation.y = (float(i) - 1.0) * 0.18
 			trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var duration := 0.46 if kind == "frost_burst" else (0.22 if kind == "hit" else (0.52 if kind == "death" else (0.26 if kind == "dodge" else (0.34 if kind == "slash" else (0.48 if kind == "cleave" else 0.72))))
+	var duration := 0.72
+	if kind == "frost_burst":
+		duration = 0.46
+	elif kind == "hit":
+		duration = 0.22
+	elif kind == "death":
+		duration = 0.52
+	elif kind == "dodge":
+		duration = 0.26
+	elif kind == "slash":
+		duration = 0.34
+	elif kind == "cleave":
+		duration = 0.48
 	combat_effects.append({"root": effect_root, "age": 0.0, "duration": duration, "kind": kind})
 
 func _update_combat_effects(delta: float) -> void:
