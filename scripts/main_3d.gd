@@ -72,6 +72,16 @@ const ENEMY_HIT_REACTION_DURATION := 0.24
 var animation_time := 0.0
 var magical_materials: Array[StandardMaterial3D] = []
 var combat_effects: Array[Dictionary] = []
+var game_started := false
+var character_name := "Wanderer"
+var character_class := "Warden"
+var class_description_label: Label
+var character_name_input: LineEdit
+var class_buttons: Dictionary = {}
+var move_speed := MOVE_SPEED
+var mobile_hud_layer: CanvasLayer
+var start_menu_layer: CanvasLayer
+var has_saved_character := false
 
 func _ready() -> void:
 	_load_progress()
@@ -80,8 +90,223 @@ func _ready() -> void:
 	_build_player()
 	_build_enemies()
 	_build_hud()
+	_build_start_menu()
+	_apply_class_visuals()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	set_process(true)
+
+func _build_start_menu() -> void:
+	start_menu_layer = CanvasLayer.new()
+	start_menu_layer.name = "CharacterCreationAndStartMenu"
+	start_menu_layer.layer = 20
+	add_child(start_menu_layer)
+	var backdrop := ColorRect.new()
+	backdrop.name = "DarkFantasyBackdrop"
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.012, 0.025, 0.035, 0.86)
+	start_menu_layer.add_child(backdrop)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	start_menu_layer.add_child(center)
+	var panel := PanelContainer.new()
+	panel.name = "StartMenuPanel"
+	panel.custom_minimum_size = Vector2(640, 600)
+	var ps := StyleBoxFlat.new()
+	ps.bg_color = Color(0.025, 0.045, 0.052, 0.97)
+	ps.border_color = Color("#68d9d4")
+	ps.set_border_width_all(2)
+	ps.set_corner_radius_all(16)
+	ps.shadow_color = Color(0, 0, 0, 0.55)
+	ps.shadow_size = 18
+	panel.add_theme_stylebox_override("panel", ps)
+	center.add_child(panel)
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 8)
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_child(content)
+	var eyebrow := Label.new()
+	eyebrow.text = "A DARK FANTASY MMORPG PROTOTYPE"
+	eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	eyebrow.add_theme_font_size_override("font_size", 13)
+	eyebrow.add_theme_color_override("font_color", Color("#7edbd5"))
+	content.add_child(eyebrow)
+	var title := Label.new()
+	title.text = "ELDERVALE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 42)
+	title.add_theme_color_override("font_color", Color("#f0dfbd"))
+	content.add_child(title)
+	var subtitle := Label.new()
+	subtitle.text = "ETERNAL DOMINION  •  SHATTERED REACH"
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 15)
+	subtitle.add_theme_color_override("font_color", Color("#a7c4c3"))
+	content.add_child(subtitle)
+	content.add_child(HSeparator.new())
+	var name_label := Label.new()
+	name_label.text = "CHARACTER NAME"
+	name_label.add_theme_font_size_override("font_size", 13)
+	name_label.add_theme_color_override("font_color", Color("#d9c69f"))
+	content.add_child(name_label)
+	character_name_input = LineEdit.new()
+	character_name_input.name = "CharacterNameInput"
+	character_name_input.placeholder_text = "Enter your hero's name"
+	character_name_input.text = character_name
+	character_name_input.max_length = 18
+	character_name_input.custom_minimum_size = Vector2(0, 44)
+	content.add_child(character_name_input)
+	var class_label := Label.new()
+	class_label.text = "CHOOSE YOUR PATH"
+	class_label.add_theme_font_size_override("font_size", 13)
+	class_label.add_theme_color_override("font_color", Color("#d9c69f"))
+	content.add_child(class_label)
+	var choices := HBoxContainer.new()
+	choices.add_theme_constant_override("separation", 8)
+	content.add_child(choices)
+	_add_class_choice(choices, "Warden", "IRONBOUND", "Balanced frontline fighter", Color("#65c8c7"))
+	_add_class_choice(choices, "Arcanist", "FROSTCALLER", "Powerful skills and ultimate", Color("#9c9bff"))
+	_add_class_choice(choices, "Ranger", "DUSKSTRIDER", "Faster strikes and movement", Color("#b4d67d"))
+	class_description_label = Label.new()
+	class_description_label.custom_minimum_size = Vector2(0, 42)
+	class_description_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	class_description_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	class_description_label.add_theme_font_size_override("font_size", 13)
+	class_description_label.add_theme_color_override("font_color", Color("#c7d5cf"))
+	content.add_child(class_description_label)
+	var begin := Button.new()
+	begin.name = "BeginAdventureButton"
+	begin.text = "ENTER THE REALM" if has_saved_character else "CREATE HERO  •  BEGIN ADVENTURE"
+	begin.custom_minimum_size = Vector2(0, 54)
+	begin.add_theme_font_size_override("font_size", 17)
+	begin.add_theme_color_override("font_color", Color("#102426"))
+	var bs := StyleBoxFlat.new()
+	bs.bg_color = Color("#79d9cc")
+	bs.set_corner_radius_all(9)
+	begin.add_theme_stylebox_override("normal", bs)
+	var bh := bs.duplicate() as StyleBoxFlat
+	bh.bg_color = Color("#a2f0dc")
+	begin.add_theme_stylebox_override("hover", bh)
+	begin.pressed.connect(_begin_adventure)
+	content.add_child(begin)
+	var footer := Label.new()
+	footer.text = "YOUR JOURNEY BEGINS BEYOND THE ANCIENT GATE"
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	footer.add_theme_font_size_override("font_size", 11)
+	footer.add_theme_color_override("font_color", Color("#718b8a"))
+	content.add_child(footer)
+	_select_character_class(character_class)
+
+func _add_class_choice(parent: HBoxContainer, class_id: String, title_text: String, description: String, accent: Color) -> void:
+	var choice := Button.new()
+	choice.name = "Class_" + class_id
+	choice.custom_minimum_size = Vector2(185, 112)
+	choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	choice.text = title_text + "\n\n" + description
+	choice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	choice.toggle_mode = true
+	choice.add_theme_font_size_override("font_size", 12)
+	choice.add_theme_color_override("font_color", Color("#e5e6d8"))
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.055, 0.085, 0.09, 1)
+	normal.border_color = accent.darkened(0.35)
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(9)
+	choice.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(0.09, 0.15, 0.15, 1)
+	hover.border_color = accent
+	choice.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color(0.09, 0.19, 0.19, 1)
+	pressed.border_color = accent
+	pressed.set_border_width_all(2)
+	choice.add_theme_stylebox_override("pressed", pressed)
+	choice.pressed.connect(_select_character_class.bind(class_id))
+	class_buttons[class_id] = choice
+	parent.add_child(choice)
+
+func _select_character_class(class_id: String) -> void:
+	if not ["Warden", "Arcanist", "Ranger"].has(class_id):
+		class_id = "Warden"
+	character_class = class_id
+	for key in class_buttons.keys():
+		var choice := class_buttons[key] as Button
+		choice.button_pressed = str(key) == character_class
+	match character_class:
+		"Arcanist":
+			class_description_label.text = "FROSTCALLER  •  Skill +35% damage, ultimate +25% damage."
+		"Ranger":
+			class_description_label.text = "DUSKSTRIDER  •  Basic attacks recharge faster; movement +15%."
+		_:
+			class_description_label.text = "IRONBOUND  •  Balanced combat and dependable melee damage."
+
+func _apply_class_visuals() -> void:
+	if not is_instance_valid(player):
+		return
+	var body := player.get_node_or_null("ArmoredBody") as MeshInstance3D
+	var rune := player.get_node_or_null("WardenHeartRune") as MeshInstance3D
+	var cape := player.get_node_or_null("WardenCape") as MeshInstance3D
+	match character_class:
+		"Arcanist":
+			if body != null:
+				body.material_override = _mat(Color("#59628e"), 0.38, 0.38)
+			if rune != null:
+				var am := _mat(Color("#b6a6ff"), 0.25, 0.25)
+				am.emission_enabled = true
+				am.emission = Color("#9488ff")
+				am.emission_energy_multiplier = 1.45
+				rune.material_override = am
+			if cape != null:
+				cape.material_override = _mat(Color("#292a54"), 0.78, 0.12)
+		"Ranger":
+			if body != null:
+				body.material_override = _mat(Color("#617b4e"), 0.52, 0.24)
+			if rune != null:
+				var rm := _mat(Color("#b8e08b"), 0.3, 0.2)
+				rm.emission_enabled = true
+				rm.emission = Color("#a4db73")
+				rm.emission_energy_multiplier = 1.15
+				rune.material_override = rm
+			if cape != null:
+				cape.material_override = _mat(Color("#293d2b"), 0.8, 0.1)
+		_:
+			if body != null:
+				body.material_override = _mat(Color("#667c80"), 0.42, 0.55)
+			if rune != null:
+				var wm := _mat(Color("#8ff9f1"), 0.25, 0.3)
+				wm.emission_enabled = true
+				wm.emission = Color("#48e4e2")
+				wm.emission_energy_multiplier = 1.35
+				rune.material_override = wm
+			if cape != null:
+				cape.material_override = _mat(Color("#263b43"), 0.82, 0.1)
+
+func _begin_adventure() -> void:
+	var entered_name := character_name_input.text.strip_edges()
+	if entered_name.is_empty():
+		character_name_input.text = ""
+		character_name_input.placeholder_text = "A name is required to begin"
+		return
+	character_name = entered_name.left(18)
+	game_started = true
+	move_speed = MOVE_SPEED * (1.15 if character_class == "Ranger" else 1.0)
+	player_max_hp = (128 if character_class == "Arcanist" else (160 if character_class == "Warden" else 142)) + armor_level * 18
+	player_hp = mini(player_hp, player_max_hp) if has_saved_character else player_max_hp
+	if hp_bar != null:
+		hp_bar.max_value = player_max_hp
+		hp_bar.value = player_hp
+	if status_label != null:
+		status_label.text = "%s  •  %s" % [character_name.to_upper(), character_class.to_upper()]
+	if target_label != null:
+		target_label.text = "%s  •  SHATTERED REACH" % character_name.to_upper()
+	if mobile_hud_layer != null:
+		mobile_hud_layer.visible = true
+	if is_instance_valid(start_menu_layer):
+		start_menu_layer.queue_free()
+	_apply_class_visuals()
+	_save_progress()
+	_refresh_progression_ui()
+
 
 func _build_environment() -> void:
 	var world_env := WorldEnvironment.new()
@@ -684,6 +909,8 @@ func _update_damage_numbers(delta: float) -> void:
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "MobileHUD"
+	layer.visible = false
+	mobile_hud_layer = layer
 	add_child(layer)
 	var panel := PanelContainer.new()
 	panel.name = "WardenStatusPanel"
@@ -702,7 +929,7 @@ func _build_hud() -> void:
 	stack.add_theme_constant_override("separation", 3)
 	panel.add_child(stack)
 	var title := Label.new()
-	title.text = "✦  ELDERVALE  /  WARDEN"
+	title.text = "✦  ELDERVALE  /  %s  •  %s" % [character_class.to_upper(), character_name.to_upper()]
 	title.add_theme_font_size_override("font_size", 17)
 	title.add_theme_color_override("font_color", Color("#dffcff"))
 	stack.add_child(title)
@@ -894,6 +1121,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		move_input = Vector2(clampf(drag_delta.x / 70.0, -1.0, 1.0), clampf(drag_delta.y / 70.0, -1.0, 1.0))
 
 func _process(delta: float) -> void:
+	if not game_started:
+		return
 	world_time += delta
 	animation_time += delta
 	dodge_cooldown = maxf(0.0, dodge_cooldown - delta)
@@ -961,7 +1190,7 @@ func _process(delta: float) -> void:
 		enemy_tails[i].rotation.x = -0.8 + sin(animation_time * 3.2 + float(i)) * 0.12
 	if input_dir.length_squared() > 0.01:
 		var direction := Vector3(input_dir.x, 0, input_dir.y)
-		player.position += direction * MOVE_SPEED * delta
+		player.position += direction * move_speed * delta
 		player.position.x = clampf(player.position.x, -WORLD_LIMIT, WORLD_LIMIT)
 		player.position.z = clampf(player.position.z, -WORLD_LIMIT, WORLD_LIMIT)
 		player.rotation.y = lerp_angle(player.rotation.y, atan2(direction.x, direction.z), minf(1.0, delta * 10.0))
@@ -1608,12 +1837,14 @@ func _nearest_enemy() -> Node3D:
 func _attack() -> void:
 	if attack_cooldown > 0.0: return
 	_spawn_combat_effect("slash")
-	attack_cooldown = 0.48
+	attack_cooldown = 0.36 if character_class == "Ranger" else 0.48
 	var target := _nearest_enemy()
 	if target != null:
 		var damage := 34 + weapon_level * 9
+		if character_class == "Ranger":
+			damage = int(round(float(damage) * 0.9))
 		_damage_enemy(target, damage)
-		status_label.text = "SWORD STRIKE  •  %d DAMAGE" % damage
+		status_label.text = "%s STRIKE  •  %d DAMAGE" % [character_class.to_upper(), damage]
 	else:
 		status_label.text = "SWORD SWING  •  MOVE CLOSER"
 	attack_flash = 0.18
@@ -1626,8 +1857,10 @@ func _skill() -> void:
 	var target := _nearest_enemy()
 	if target != null:
 		var damage := 58 + weapon_level * 14
+		if character_class == "Arcanist":
+			damage = int(round(float(damage) * 1.35))
 		_damage_enemy(target, damage)
-		status_label.text = "WARDEN CLEAVE  •  %d DAMAGE" % damage
+		status_label.text = "%s SKILL  •  %d DAMAGE" % [character_class.to_upper(), damage]
 	else:
 		status_label.text = "WARDEN CLEAVE  •  NO TARGET"
 	attack_flash = 0.32
@@ -1735,8 +1968,10 @@ func _ultimate() -> void:
 	var target := _nearest_enemy()
 	if target != null:
 		var damage := 90 + weapon_level * 22
+		if character_class == "Arcanist":
+			damage = int(round(float(damage) * 1.25))
 		_damage_enemy(target, damage)
-		status_label.text = "ANCIENT OATH  •  %d DAMAGE" % damage
+		status_label.text = "%s ULTIMATE  •  %d DAMAGE" % [character_class.to_upper(), damage]
 	else:
 		status_label.text = "ANCIENT OATH  •  NO TARGET"
 	attack_flash = 0.4
@@ -1929,6 +2164,8 @@ func _advance_quest(gained: Array[String]) -> void:
 
 func _save_progress() -> void:
 	var save := ConfigFile.new()
+	save.set_value("character", "name", character_name)
+	save.set_value("character", "class", character_class)
 	save.set_value("player", "level", player_level)
 	save.set_value("player", "xp", xp)
 	save.set_value("player", "xp_to_next_level", xp_to_next_level)
@@ -1948,6 +2185,11 @@ func _load_progress() -> void:
 	var save := ConfigFile.new()
 	if save.load("user://eldervale_progress.cfg") != OK:
 		return
+	has_saved_character = true
+	character_name = str(save.get_value("character", "name", character_name))
+	character_class = str(save.get_value("character", "class", character_class))
+	if not ["Warden", "Arcanist", "Ranger"].has(character_class):
+		character_class = "Warden"
 	player_level = int(save.get_value("player", "level", player_level))
 	xp = int(save.get_value("player", "xp", xp))
 	xp_to_next_level = int(save.get_value("player", "xp_to_next_level", xp_to_next_level))
