@@ -1100,10 +1100,10 @@ func _build_profile_panel(layer: CanvasLayer) -> void:
 	profile_panel = PanelContainer.new()
 	profile_panel.name = "HeroStatsSkillsPanel"
 	profile_panel.set_anchors_preset(Control.PRESET_CENTER)
-	profile_panel.offset_left = -250
-	profile_panel.offset_top = -245
-	profile_panel.offset_right = 250
-	profile_panel.offset_bottom = 245
+	profile_panel.offset_left = -230
+	profile_panel.offset_top = -270
+	profile_panel.offset_right = 230
+	profile_panel.offset_bottom = 270
 	profile_panel.visible = false
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.018, 0.035, 0.043, 0.97)
@@ -1127,7 +1127,7 @@ func _build_profile_panel(layer: CanvasLayer) -> void:
 	stack.add_child(divider)
 	profile_content_label = Label.new()
 	profile_content_label.name = "ProfilePageContent"
-	profile_content_label.custom_minimum_size = Vector2(450, 330)
+	profile_content_label.custom_minimum_size = Vector2(410, 280)
 	profile_content_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	profile_content_label.add_theme_font_size_override("font_size", 16)
 	profile_content_label.add_theme_color_override("font_color", Color("#d6e2d7"))
@@ -1166,13 +1166,15 @@ func _show_profile_tab(tab_name: String) -> void:
 	match tab_name:
 		"STATS":
 			profile_title_label.text = "CHARACTER ATTRIBUTES"
-			var attack_power := 34 + weapon_level * 9
-			var skill_power := 58 + weapon_level * 14
+			var attack_power := 34 + weapon_level * 9 + strength_rank * 3
+			var skill_power := int(round(float(58 + weapon_level * 14 + strength_rank * 3) * (1.0 + float(signature_skill_rank - 1) * 0.12)))
 			if character_class == "Arcanist":
 				skill_power = int(round(float(skill_power) * 1.35))
 			profile_content_label.text = "NAME     %s\\nCLASS    %s\\nLEVEL    %d\\nEXPERIENCE    %d / %d\\n\\nVITALITY RANK    %d\\nMAX HP    %d / %d\\nARMOR    %d upgrade rank\\nPOWER RANK    %d\\nUNSPENT ATTRIBUTE POINTS    %d\\n\\nCOMBAT RATINGS\\nBasic strike    %d damage\\nSignature skill    %d damage\\nWeapon rank    %d / 5\\nArmor rank    %d / 5\\n\\nWALLET\\nCoins    %d" % [character_name, character_class, player_level, xp, xp_to_next_level, vitality_rank, player_hp, player_max_hp, armor_level, strength_rank, stat_points, attack_power, skill_power, weapon_level, armor_level, coins]
-			profile_power_button.text = "POWER +1  •  %d POINTS AVAILABLE" % stat_points
-			profile_vitality_button.text = "VITALITY +1  •  %d POINTS AVAILABLE" % stat_points
+			profile_power_button.text = "POWER +1  •  %d POINTS" % stat_points
+			profile_power_button.disabled = stat_points <= 0 or strength_rank >= 50
+			profile_vitality_button.text = "VITALITY +8 HP  •  %d POINTS" % stat_points
+			profile_vitality_button.disabled = stat_points <= 0 or vitality_rank >= 50
 		"SKILLS":
 			profile_title_label.text = "COMBAT SKILLS"
 			var class_skill := "Warden Cleave"
@@ -1184,7 +1186,8 @@ func _show_profile_tab(tab_name: String) -> void:
 				class_skill = "Duskstrider Cut"
 				class_passive = "Basic attack cooldown reduced; movement speed +15%"
 			profile_content_label.text = "CLASS SIGNATURE\\n%s\\nRank %d / 5  •  Cooldown: 4.0 seconds\\nBase damage: %d\\n\\nBASIC ATTACK\\nSword Strike\\nCooldown: 0.48 seconds (0.36 Ranger)\\n\\nEVASION\\nDodge Roll\\n2.8-second cooldown • 0.32-second invulnerability\\n\\nULTIMATE\\nAncient Oath\\nHigh-impact strike; class modifiers apply\\n\\nCLASS TRAIT\\n%s\\n\\nSKILL POINTS AVAILABLE    %d\\nUpgrade signature skill to increase its damage by 12%% per rank." % [class_skill, signature_skill_rank, int(round(float(58 + weapon_level * 14) * (1.0 + float(signature_skill_rank - 1) * 0.12))), class_passive, skill_points]
-			profile_skill_button.text = "UPGRADE SIGNATURE  •  %d SKILL POINTS" % skill_points
+			profile_skill_button.text = "UPGRADE SIGNATURE  •  %d POINTS" % skill_points
+			profile_skill_button.disabled = skill_points <= 0 or signature_skill_rank >= 5
 		_:
 			profile_title_label.text = "HERO PROFILE"
 			profile_content_label.text = "%s\n%s  •  LEVEL %d\n\nYOUR JOURNEY\nShattered Reach — ancient ruins\nCurrent story: %s\n\nEQUIPMENT\nAshen Blade  •  rank %d\nRuin Armor  •  rank %d\n\nCOLLECTION\nCoins: %d\nRecorded discoveries: %d\n\nChoose STATS for attributes or SKILLS for combat abilities." % [character_name, character_class, player_level, _quest_description(), weapon_level, armor_level, coins, codex_discoveries.size()]
@@ -2285,7 +2288,7 @@ func _craft_armor() -> void:
 	inventory["Ruin Core"] = int(inventory["Ruin Core"]) - 2
 	coins -= 35
 	armor_level += 1
-	player_max_hp = 148 + armor_level * 18
+	player_max_hp = 148 + armor_level * 18 + vitality_rank * 8
 	player_hp = mini(player_max_hp, player_hp + 18)
 	_refresh_equipment_visuals()
 	status_label.text = "RUIN ARMOR EQUIPPED  •  LEVEL %d  •  +%d MAX HP" % [armor_level, armor_level * 18]
