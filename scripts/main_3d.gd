@@ -58,6 +58,8 @@ var frost_warden_states: Dictionary = {}
 var health_bar_fade_effects: Array[Dictionary] = []
 var damage_number_effects: Array[Dictionary] = []
 var animated_sword: Node3D
+var sword_energy_trails: Array[MeshInstance3D] = []
+var xp_bar: ProgressBar
 var animated_cape: Node3D
 var animated_torso: Node3D
 var attack_anim_time := 0.0
@@ -362,8 +364,31 @@ func _build_player() -> void:
 	head.scale = Vector3(0.38, 0.43, 0.36)
 	var helmet := _mesh_node(player, SphereMesh.new(), dark_armor, Vector3(0, 2.25, 0), "Helmet")
 	helmet.scale = Vector3(0.43, 0.28, 0.4)
+	var helmet_ridge := _mesh_node(player, PrismMesh.new(), gold, Vector3(0.0, 2.43, -0.015), "HelmCrest")
+	helmet_ridge.scale = Vector3(0.16, 0.36, 0.13)
+	helmet_ridge.rotation.z = -0.12
+	var visor := _box(player, Vector3(0.5, 0.075, 0.08), _mat(Color("#101b23"), 0.24, 0.3), Vector3(0.0, 2.22, -0.36), "HelmVisor")
+	var visor_glow_mat := _mat(Color("#77f2f4"), 0.24, 0.2)
+	visor_glow_mat.emission_enabled = true
+	visor_glow_mat.emission = Color("#4fe6ef")
+	visor_glow_mat.emission_energy_multiplier = 1.2
+	var visor_glow := _box(player, Vector3(0.34, 0.025, 0.035), visor_glow_mat, Vector3(0.0, 2.225, -0.408), "VisorGlow")
+	visor_glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_box(player, Vector3(0.95, 0.18, 0.72), gold, Vector3(0, 1.55, -0.02), "ChestTrim")
 	_box(player, Vector3(0.78, 0.42, 0.12), dark_armor, Vector3(0, 1.22, -0.37), "LayeredBreastplate")
+	var chest_rune_mat := _mat(Color("#8ff9f1"), 0.25, 0.3)
+	chest_rune_mat.emission_enabled = true
+	chest_rune_mat.emission = Color("#48e4e2")
+	chest_rune_mat.emission_energy_multiplier = 1.35
+	var chest_rune := _mesh_node(player, PrismMesh.new(), chest_rune_mat, Vector3(0.0, 1.28, -0.455), "WardenHeartRune")
+	chest_rune.scale = Vector3(0.12, 0.2, 0.055)
+	chest_rune.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for side in [-1.0, 1.0]:
+		var armor_flare := _mesh_node(player, PrismMesh.new(), gold, Vector3(side * 0.66, 1.58, -0.015), "ShoulderFlare")
+		armor_flare.scale = Vector3(0.25, 0.42, 0.3)
+		armor_flare.rotation.z = -side * 0.38
+		var hip_plate := _box(player, Vector3(0.26, 0.32, 0.16), armor, Vector3(side * 0.42, 0.78, -0.22), "HipArmorPlate")
+		hip_plate.rotation.z = side * 0.18
 	_box(player, Vector3(0.72, 0.12, 0.68), gold, Vector3(0, 0.83, 0), "WarriorBelt")
 	var cape := _mesh_node(player, PrismMesh.new(), _mat(Color("#263b43"), 0.82, 0.1), Vector3(0, 1.12, 0.42), "WardenCape")
 	cape.scale = Vector3(0.7, 0.92, 0.18)
@@ -386,6 +411,18 @@ func _build_player() -> void:
 	var sword := _box(player, Vector3(0.13, 1.45, 0.18), _mat(Color("#d8e0d5"), 0.24, 0.85), Vector3(0.82, 1.25, -0.1), "Longsword")
 	sword.rotation.z = -0.28
 	animated_sword = sword
+	var trail_mat := _mat(Color("#9dfcff"), 0.22, 0.35)
+	trail_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	trail_mat.emission_enabled = true
+	trail_mat.emission = Color("#58efff")
+	trail_mat.emission_energy_multiplier = 1.65
+	for trail_index in range(3):
+		var trail := _box(player, Vector3(0.045 + float(trail_index) * 0.018, 0.055, 1.05 + float(trail_index) * 0.22), trail_mat, Vector3(0.48 + float(trail_index) * 0.07, 1.2, -0.68 - float(trail_index) * 0.08), "SwordEnergyTrail")
+		trail.rotation.y = (float(trail_index) - 1.0) * 0.18
+		trail.rotation.x = -0.16
+		trail.visible = false
+		trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		sword_energy_trails.append(trail)
 	_box(player, Vector3(0.42, 0.12, 0.22), gold, Vector3(0.79, 0.62, -0.1), "SwordGuard")
 	camera = Camera3D.new()
 	camera.name = "ThirdPersonCamera"
@@ -645,22 +682,25 @@ func _build_hud() -> void:
 	layer.name = "MobileHUD"
 	add_child(layer)
 	var panel := PanelContainer.new()
+	panel.name = "WardenStatusPanel"
 	panel.position = Vector2(22, 18)
-	panel.custom_minimum_size = Vector2(300, 100)
+	panel.custom_minimum_size = Vector2(320, 118)
 	layer.add_child(panel)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.035, 0.055, 0.05, 0.88)
-	style.border_color = Color("#b99a65")
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(8)
+	style.bg_color = Color(0.018, 0.035, 0.05, 0.9)
+	style.border_color = Color("#67dfe5")
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(12)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.38)
+	style.shadow_size = 8
 	panel.add_theme_stylebox_override("panel", style)
 	var stack := VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 3)
 	panel.add_child(stack)
 	var title := Label.new()
-	title.text = "ELDERVALE  •  WARDEN LV. 5"
-	title.add_theme_font_size_override("font_size", 19)
-	title.add_theme_color_override("font_color", Color("#f0dfbf"))
+	title.text = "✦  ELDERVALE  /  WARDEN"
+	title.add_theme_font_size_override("font_size", 17)
+	title.add_theme_color_override("font_color", Color("#dffcff"))
 	stack.add_child(title)
 	hp_bar = ProgressBar.new()
 	hp_bar.custom_minimum_size = Vector2(270, 15)
@@ -670,6 +710,16 @@ func _build_hud() -> void:
 	hp_bar.add_theme_stylebox_override("background", _hud_bar_style(Color("#352c2a")))
 	hp_bar.add_theme_stylebox_override("fill", _hud_bar_style(Color("#b84d46")))
 	stack.add_child(hp_bar)
+	xp_bar = ProgressBar.new()
+	xp_bar.name = "ExperienceBar"
+	xp_bar.custom_minimum_size = Vector2(270, 7)
+	xp_bar.min_value = 0
+	xp_bar.max_value = xp_to_next_level
+	xp_bar.value = xp
+	xp_bar.show_percentage = false
+	xp_bar.add_theme_stylebox_override("background", _hud_bar_style(Color("#14262d")))
+	xp_bar.add_theme_stylebox_override("fill", _hud_bar_style(Color("#5ce0dc")))
+	stack.add_child(xp_bar)
 	stats_label = Label.new()
 	stats_label.name = "ProgressionStats"
 	stats_label.add_theme_font_size_override("font_size", 12)
@@ -790,10 +840,12 @@ func _add_action_button(layer: CanvasLayer, caption: String, offset: Vector2, si
 	button.offset_bottom = offset.y + size.y * 0.5
 	button.add_theme_font_size_override("font_size", 15)
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = tint.darkened(0.45)
-	normal.border_color = tint.lightened(0.25)
-	normal.set_border_width_all(3)
+	normal.bg_color = Color(tint.r * 0.35, tint.g * 0.35, tint.b * 0.35, 0.94)
+	normal.border_color = tint.lightened(0.35)
+	normal.set_border_width_all(2)
 	normal.set_corner_radius_all(48)
+	normal.shadow_color = Color(0.0, 0.0, 0.0, 0.45)
+	normal.shadow_size = 5
 	button.add_theme_stylebox_override("normal", normal)
 	var pressed := normal.duplicate() as StyleBoxFlat
 	pressed.bg_color = tint
@@ -872,6 +924,12 @@ func _process(delta: float) -> void:
 	if animated_sword != null:
 		animated_sword.rotation.z = -0.28 + anticipation * 0.82 - swing * 1.55 + follow_through * 0.18
 		animated_sword.rotation.x = -anticipation * 0.18 + swing * 0.42
+	for trail_index in range(sword_energy_trails.size()):
+		var energy_trail := sword_energy_trails[trail_index]
+		energy_trail.visible = attack_active and attack_phase >= 0.2 and attack_phase <= 0.78
+		energy_trail.rotation.y = (float(trail_index) - 1.0) * 0.18 + swing * (0.34 + float(trail_index) * 0.08)
+		energy_trail.rotation.x = -0.16 + anticipation * 0.2 - swing * 0.18
+		energy_trail.scale = Vector3.ONE * (0.62 + swing * 0.62)
 	if animated_torso != null:
 		animated_torso.position.y = 1.12 + (absf(gait) * 0.035 if walking else 0.0) - anticipation * 0.025 - swing * 0.065 + follow_through * 0.02
 		animated_torso.rotation.y = anticipation * -0.12 + swing * 0.18
@@ -895,6 +953,18 @@ func _process(delta: float) -> void:
 		if not is_instance_valid(enemy): continue
 		var hit_left: float = maxf(0.0, float(enemy_hit_timers.get(enemy, 0.0)) - delta)
 		enemy_hit_timers[enemy] = hit_left
+		if enemy.name != "FrostWarden" and not enemy_recovery_animations.has(enemy):
+			var idle_body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
+			var idle_head := enemy.get_node_or_null("EnemyHead") as MeshInstance3D
+			if idle_body != null:
+				idle_body.position.y = 0.72 + sin(animation_time * 3.2 + float(i)) * 0.045
+				idle_body.rotation.z = sin(animation_time * 2.1 + float(i) * 0.8) * 0.035
+			if idle_head != null:
+				idle_head.rotation.y = sin(animation_time * 1.7 + float(i) * 1.3) * 0.09
+			var to_player := player.position - enemy.position
+			if to_player.length_squared() > 0.01:
+				var desired_yaw := atan2(to_player.x, to_player.z)
+				enemy.rotation.y = lerp_angle(enemy.rotation.y, desired_yaw, minf(1.0, delta * 1.8))
 		var knockback: Vector3 = enemy_knockback.get(enemy, Vector3.ZERO)
 		if knockback.length_squared() > 0.0004:
 			enemy.position += knockback * delta
@@ -1238,11 +1308,19 @@ func _spawn_combat_effect(kind: String, origin: Variant = null) -> void:
 			beam.rotation.y = float(i) * TAU / 4.0
 			beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	elif kind == "hit":
-		# Five tiny angular sparks radiate from the impact point.
-		for i in range(5):
-			var angle := TAU * float(i) / 5.0
-			var spark := _box(effect_root, Vector3(0.07, 0.07, 0.42), glow, Vector3(cos(angle) * 0.22, sin(angle) * 0.22, 0.0), "ImpactSpark")
-			spark.rotation.z = angle
+		# Radial impact ring plus angular sparks: geometry is created only on hit, never per frame.
+		var impact_ring_mesh := TorusMesh.new()
+		impact_ring_mesh.inner_radius = 0.16
+		impact_ring_mesh.outer_radius = 0.24
+		impact_ring_mesh.rings = 5
+		impact_ring_mesh.ring_segments = 16
+		var impact_ring := _mesh_node(effect_root, impact_ring_mesh, glow, Vector3(0.0, 0.12, 0.0), "ImpactRing")
+		impact_ring.rotation.x = deg_to_rad(90.0)
+		impact_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		for i in range(8):
+			var angle := TAU * float(i) / 8.0
+			var spark := _box(effect_root, Vector3(0.07, 0.09, 0.48 + float(i % 3) * 0.08), glow, Vector3(cos(angle) * 0.28, 0.18 + sin(angle) * 0.2, sin(angle) * 0.28), "ImpactSpark")
+			spark.rotation = Vector3(angle * 0.4, angle, angle)
 			spark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	elif kind.begins_with("frost_"):
 		var ring_count := 1
@@ -1280,10 +1358,18 @@ func _spawn_combat_effect(kind: String, origin: Variant = null) -> void:
 			shard.rotation = Vector3(0.0, angle, angle * 0.35)
 			shard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	elif kind == "death":
-		# Low-poly ember shards replace the former short-lived point light.
-		for i in range(7):
-			var angle := TAU * float(i) / 7.0
-			var shard := _box(effect_root, Vector3(0.11, 0.18 + float(i % 3) * 0.04, 0.1), glow, Vector3(cos(angle) * 0.32, 0.48 + float(i % 2) * 0.18, sin(angle) * 0.32), "DeathEmberShard")
+		# A brief shatter burst: one expanding ring and a bounded set of 12 low-poly fragments.
+		var death_ring_mesh := TorusMesh.new()
+		death_ring_mesh.inner_radius = 0.28
+		death_ring_mesh.outer_radius = 0.36
+		death_ring_mesh.rings = 5
+		death_ring_mesh.ring_segments = 18
+		var death_ring := _mesh_node(effect_root, death_ring_mesh, glow, Vector3(0.0, 0.16, 0.0), "DeathShockRing")
+		death_ring.rotation.x = deg_to_rad(90.0)
+		death_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		for i in range(12):
+			var angle := TAU * float(i) / 12.0
+			var shard := _box(effect_root, Vector3(0.1, 0.2 + float(i % 3) * 0.06, 0.1), glow, Vector3(cos(angle) * 0.38, 0.38 + float(i % 3) * 0.13, sin(angle) * 0.38), "DeathShatterShard")
 			shard.rotation = Vector3(angle * 0.4, angle, angle * 0.7)
 			shard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	elif kind == "dodge":
@@ -1553,7 +1639,10 @@ func _toggle_inventory() -> void:
 
 func _refresh_progression_ui() -> void:
 	if stats_label != null:
-		stats_label.text = "HP %d/%d    LV. %d    XP %d/%d    COINS %d" % [player_hp, player_max_hp, player_level, xp, xp_to_next_level, coins]
+		stats_label.text = "LV. %d    XP %d/%d    ◈ %d" % [player_level, xp, xp_to_next_level, coins]
+	if xp_bar != null:
+		xp_bar.max_value = xp_to_next_level
+		xp_bar.value = xp
 	if inventory_label != null:
 		var lines: Array[String] = []
 		for item_name in ["Ashen Pelt", "Ancient Shard", "Echo Fragment", "Ruin Core", "Warden Emblem", "Frost Sigil", "Glacial Crown"]:
