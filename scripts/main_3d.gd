@@ -2516,6 +2516,9 @@ func _refresh_gear_inventory_ui() -> void:
 		if salvage_selected_gear_button != null:
 			salvage_selected_gear_button.disabled = true
 			salvage_selected_gear_button.text = "DISMANTLE SELECTED GEAR"
+		if enhance_selected_gear_button != null:
+			enhance_selected_gear_button.disabled = true
+			enhance_selected_gear_button.text = "ENHANCE SELECTED GEAR"
 		return
 	var selected_slot := str(selected.get("slot", "weapon"))
 	var equipped := _equipped_loot_gear(selected_slot)
