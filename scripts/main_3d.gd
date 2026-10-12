@@ -1001,6 +1001,8 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 		if status_label != null:
 			status_label.text = "FROST WARDEN ENRAGED  •  PHASE III" if phase == 2 else "FROST WARDEN AWAKENS  •  PHASE II"
 	_update_boss_hud(enemy)
+	var boss_body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
+	var boss_core := enemy.get_node_or_null("FrostCore") as MeshInstance3D
 	var phase_shift_left := maxf(0.0, float(state.get("phase_shift", 0.0)) - delta)
 	state["phase_shift"] = phase_shift_left
 	if phase_shift_left > 0.0:
@@ -1013,8 +1015,6 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 		frost_warden_states[enemy] = state
 		return
 	var windup := float(state.get("windup", 0.0))
-	var boss_body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
-	var boss_core := enemy.get_node_or_null("FrostCore") as MeshInstance3D
 	var boss_orbit := enemy.get_node_or_null("FrostCoreOrbit") as MeshInstance3D
 	if boss_orbit != null:
 		boss_orbit.rotation.y += delta * (2.2 if phase == 2 else 1.45)
