@@ -106,6 +106,8 @@ func _ready() -> void:
 	_build_hud()
 	_build_start_menu()
 	_apply_class_visuals()
+	get_viewport().size_changed.connect(_layout_mobile_ui)
+	_layout_mobile_ui()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	set_process(true)
 
@@ -304,8 +306,11 @@ func _begin_adventure() -> void:
 	character_name = entered_name.left(18)
 	game_started = true
 	move_speed = MOVE_SPEED * (1.15 if character_class == "Ranger" else 1.0)
-	player_max_hp = (128 if character_class == "Arcanist" else (160 if character_class == "Warden" else 142)) + armor_level * 18
-	player_hp = mini(player_hp, player_max_hp) if has_saved_character else player_max_hp
+	_recalculate_derived_stats(false)
+	if has_saved_character:
+		player_hp = clampi(player_hp, 1, player_max_hp)
+	else:
+		player_hp = player_max_hp
 	if hp_bar != null:
 		hp_bar.max_value = player_max_hp
 		hp_bar.value = player_hp
@@ -677,6 +682,26 @@ func _build_player() -> void:
 	camera.rotation = Vector3(deg_to_rad(-25), 0, 0)
 	camera.fov = 62.0
 	_refresh_equipment_visuals()
+
+func _base_class_hp() -> int:
+	match character_class:
+		"Arcanist":
+			return 128
+		"Ranger":
+			return 142
+		_:
+			return 160
+
+func _recalculate_derived_stats(heal_increased_capacity: bool = false) -> void:
+	var previous_max_hp := player_max_hp
+	player_max_hp = _base_class_hp() + armor_level * 18 + vitality_rank * 8
+	if heal_increased_capacity and player_max_hp > previous_max_hp:
+		player_hp = mini(player_max_hp, player_hp + player_max_hp - previous_max_hp)
+	else:
+		player_hp = clampi(player_hp, 0, player_max_hp)
+	if hp_bar != null:
+		hp_bar.max_value = player_max_hp
+		hp_bar.value = player_hp
 
 func _refresh_equipment_visuals() -> void:
 	if player == null:
@@ -1108,6 +1133,7 @@ func _build_hud() -> void:
 	_add_profile_tab(profile_tabs, "SKILLS")
 	_add_profile_tab(profile_tabs, "EQUIPMENT")
 	var help := Label.new()
+	help.name = "MobileControlHelp"
 	help.position = Vector2(24, 650)
 	help.text = "MOVE  •  LEFT SIDE      ATTACK  •  SKILL  •  DODGE"
 	help.add_theme_font_size_override("font_size", 12)
@@ -1130,6 +1156,94 @@ func _add_profile_tab(parent: HBoxContainer, tab_name: String) -> void:
 	button.add_theme_stylebox_override("pressed", pressed)
 	button.pressed.connect(_show_profile_tab.bind(tab_name))
 	parent.add_child(button)
+
+
+func _layout_mobile_ui() -> void:
+	if mobile_hud_layer == null or not is_instance_valid(mobile_hud_layer):
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x < 1.0 or viewport_size.y < 1.0:
+		return
+	var ui_scale := clampf(minf(viewport_size.x / 1280.0, viewport_size.y / 720.0), 0.72, 1.0)
+	var status_panel := mobile_hud_layer.get_node_or_null("WardenStatusPanel") as PanelContainer
+	if status_panel != null:
+		status_panel.position = Vector2(14.0, 14.0)
+		status_panel.custom_minimum_size = Vector2(minf(340.0, viewport_size.x * 0.40), 112.0 * ui_scale)
+	if status_label != null:
+		status_label.name = "CombatStatus"
+		status_label.position = Vector2(viewport_size.x * 0.34, 14.0)
+		status_label.size = Vector2(viewport_size.x * 0.32, 42.0 * ui_scale)
+		status_label.add_theme_font_size_override("font_size", int(18.0 * ui_scale))
+	var boss_width := minf(480.0 * ui_scale, viewport_size.x * 0.46)
+	if boss_panel != null:
+		boss_panel.position = Vector2((viewport_size.x - boss_width) * 0.5, 62.0 * ui_scale)
+		boss_panel.custom_minimum_size = Vector2(boss_width, 54.0 * ui_scale)
+		var boss_bar := boss_panel.get_node_or_null("VBoxContainer/ProgressBar") as ProgressBar
+		if boss_bar != null:
+			boss_bar.custom_minimum_size.x = maxf(160.0, boss_width - 28.0)
+	if target_label != null:
+		target_label.position = Vector2(16.0, 130.0 * ui_scale)
+		target_label.size = Vector2(minf(360.0, viewport_size.x * 0.42), 24.0 * ui_scale)
+		target_label.add_theme_font_size_override("font_size", int(13.0 * ui_scale))
+	if dodge_status_label != null:
+		dodge_status_label.position = Vector2(16.0, 154.0 * ui_scale)
+		dodge_status_label.size = Vector2(minf(320.0, viewport_size.x * 0.4), 22.0 * ui_scale)
+		dodge_status_label.add_theme_font_size_override("font_size", int(13.0 * ui_scale))
+	var action_layout := {
+		"Action_ATTACK": Vector4(-104.0, -104.0, 96.0, 96.0),
+		"Action_SKILL": Vector4(-220.0, -82.0, 82.0, 82.0),
+		"Action_DODGE": Vector4(-184.0, -184.0, 72.0, 72.0),
+		"Action_ULT": Vector4(-300.0, -128.0, 76.0, 76.0),
+		"Action_BAG": Vector4(-78.0, -292.0, 76.0, 44.0)
+	}
+	for action_name in action_layout.keys():
+		var action_button := mobile_hud_layer.get_node_or_null(str(action_name)) as Button
+		if action_button == null:
+			continue
+		var spec: Vector4 = action_layout[action_name]
+		var button_size := Vector2(spec.z, spec.w) * ui_scale
+		var right_offset := spec.x * ui_scale
+		var bottom_offset := spec.y * ui_scale
+		action_button.custom_minimum_size = button_size
+		action_button.size = button_size
+		action_button.offset_left = right_offset - button_size.x * 0.5
+		action_button.offset_top = bottom_offset - button_size.y * 0.5
+		action_button.offset_right = right_offset + button_size.x * 0.5
+		action_button.offset_bottom = bottom_offset + button_size.y * 0.5
+		action_button.add_theme_font_size_override("font_size", int(15.0 * ui_scale))
+	var tabs := mobile_hud_layer.get_node_or_null("HeroMenuTabs") as HBoxContainer
+	if tabs != null:
+		tabs.position = Vector2(16.0, 184.0 * ui_scale)
+		tabs.scale = Vector2.ONE * ui_scale
+	var help := mobile_hud_layer.get_node_or_null("MobileControlHelp") as Label
+	if help != null:
+		help.position = Vector2(20.0, viewport_size.y - 34.0 * ui_scale)
+		help.add_theme_font_size_override("font_size", int(12.0 * ui_scale))
+	if inventory_panel != null:
+		var inventory_width := minf(440.0, viewport_size.x - 28.0)
+		var inventory_height := minf(470.0, viewport_size.y - 28.0)
+		inventory_panel.set_anchors_preset(Control.PRESET_CENTER)
+		inventory_panel.offset_left = -inventory_width * 0.5
+		inventory_panel.offset_right = inventory_width * 0.5
+		inventory_panel.offset_top = -inventory_height * 0.5
+		inventory_panel.offset_bottom = inventory_height * 0.5
+		inventory_panel.custom_minimum_size = Vector2(inventory_width, inventory_height)
+		var inventory_contents := inventory_panel.get_node_or_null("VBoxContainer/InventoryContents") as Label
+		if inventory_contents != null:
+			inventory_contents.custom_minimum_size = Vector2(inventory_width - 30.0, maxf(110.0, inventory_height * 0.48))
+			inventory_contents.add_theme_font_size_override("font_size", int(15.0 * ui_scale))
+	if profile_panel != null:
+		var profile_width := minf(460.0, viewport_size.x - 28.0)
+		var profile_height := minf(540.0, viewport_size.y - 24.0)
+		profile_panel.set_anchors_preset(Control.PRESET_CENTER)
+		profile_panel.offset_left = -profile_width * 0.5
+		profile_panel.offset_right = profile_width * 0.5
+		profile_panel.offset_top = -profile_height * 0.5
+		profile_panel.offset_bottom = profile_height * 0.5
+		profile_panel.custom_minimum_size = Vector2(profile_width, profile_height)
+		if profile_content_label != null:
+			profile_content_label.custom_minimum_size = Vector2(profile_width - 46.0, maxf(110.0, profile_height - 250.0))
+			profile_content_label.add_theme_font_size_override("font_size", int(16.0 * ui_scale))
 
 func _build_profile_panel(layer: CanvasLayer) -> void:
 	profile_panel = PanelContainer.new()
@@ -1205,6 +1319,7 @@ func _show_profile_tab(tab_name: String) -> void:
 	if profile_panel == null or profile_content_label == null:
 		return
 	profile_panel.visible = true
+	_layout_mobile_ui()
 	profile_power_button.visible = tab_name == "STATS"
 	profile_vitality_button.visible = tab_name == "STATS"
 	profile_skill_button.visible = tab_name == "SKILLS"
@@ -1265,8 +1380,7 @@ func _allocate_attribute(attribute: String) -> void:
 			return
 		vitality_rank += 1
 		stat_points -= 1
-		player_max_hp += 8
-		player_hp = mini(player_max_hp, player_hp + 8)
+			_recalculate_derived_stats(true)
 		status_label.text = "VITALITY INCREASED  •  MAX HP +8"
 	else:
 		return
@@ -1300,6 +1414,7 @@ func _hud_bar_style(color: Color) -> StyleBoxFlat:
 
 func _add_action_button(layer: CanvasLayer, caption: String, offset: Vector2, size: Vector2, tint: Color, action: Callable) -> void:
 	var button := Button.new()
+	button.name = "Action_" + caption
 	button.text = caption
 	button.custom_minimum_size = size
 	button.size = size
@@ -2368,8 +2483,7 @@ func _craft_armor() -> void:
 	inventory["Ruin Core"] = int(inventory["Ruin Core"]) - 2
 	coins -= 35
 	armor_level += 1
-	player_max_hp = 148 + armor_level * 18 + vitality_rank * 8
-	player_hp = mini(player_max_hp, player_hp + 18)
+	_recalculate_derived_stats(true)
 	_refresh_equipment_visuals()
 	status_label.text = "RUIN ARMOR EQUIPPED  •  LEVEL %d  •  +%d MAX HP" % [armor_level, armor_level * 18]
 	_refresh_progression_ui()
@@ -2432,6 +2546,7 @@ func _save_progress() -> void:
 	save.set_value("player", "xp", xp)
 	save.set_value("player", "xp_to_next_level", xp_to_next_level)
 	save.set_value("player", "coins", coins)
+	save.set_value("player", "hp", player_hp)
 	save.set_value("player", "stat_points", stat_points)
 	save.set_value("player", "skill_points", skill_points)
 	save.set_value("attributes", "strength_rank", strength_rank)
@@ -2460,7 +2575,8 @@ func _load_progress() -> void:
 	player_level = int(save.get_value("player", "level", player_level))
 	xp = int(save.get_value("player", "xp", xp))
 	xp_to_next_level = int(save.get_value("player", "xp_to_next_level", xp_to_next_level))
-	coins = int(save.get_value("player", "coins", coins))
+	coins = maxi(0, int(save.get_value("player", "coins", coins)))
+	player_hp = int(save.get_value("player", "hp", player_hp))
 	stat_points = clampi(int(save.get_value("player", "stat_points", stat_points)), 0, 100)
 	skill_points = clampi(int(save.get_value("player", "skill_points", skill_points)), 0, 100)
 	strength_rank = clampi(int(save.get_value("attributes", "strength_rank", strength_rank)), 0, 50)
@@ -2479,8 +2595,8 @@ func _load_progress() -> void:
 	boss_first_kill_claimed = bool(save.get_value("boss", "first_kill_claimed", boss_first_kill_claimed))
 	if quest_completed and quest_stage == 3:
 		quest_stage = 4
-	player_max_hp = 148 + armor_level * 18 + vitality_rank * 8
-	player_hp = mini(player_hp, player_max_hp)
+	_recalculate_derived_stats(false)
+	player_hp = clampi(player_hp, 1, player_max_hp)
 	var saved_discoveries: Variant = save.get_value("codex", "discoveries", [])
 	if saved_discoveries is Array:
 		for discovery in saved_discoveries:
