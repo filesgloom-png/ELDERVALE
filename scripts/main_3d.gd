@@ -33,6 +33,12 @@ var equipped_loot_armor_id := 0
 var next_loot_gear_id := 1
 var loot_weapon_button: Button
 var loot_armor_button: Button
+var gear_sort_option: OptionButton
+var gear_list_container: VBoxContainer
+var gear_detail_label: Label
+var equip_selected_gear_button: Button
+var selected_gear_id := 0
+var gear_sort_mode := 0
 var boss_first_kill_claimed := false
 var codex_discoveries: Array[String] = []
 var weapon_level := 0
@@ -1107,9 +1113,16 @@ func _build_hud() -> void:
 	inventory_style.set_corner_radius_all(8)
 	inventory_panel.add_theme_stylebox_override("panel", inventory_style)
 	layer.add_child(inventory_panel)
+	var inventory_scroll := ScrollContainer.new()
+	inventory_scroll.name = "InventoryScroll"
+	inventory_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_scroll.custom_minimum_size = Vector2(0, 420)
+	inventory_panel.add_child(inventory_scroll)
 	var inventory_stack := VBoxContainer.new()
-	inventory_stack.add_theme_constant_override("separation", 8)
-	inventory_panel.add_child(inventory_stack)
+	inventory_stack.add_theme_constant_override("separation", 7)
+	inventory_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_scroll.add_child(inventory_stack)
 	var inventory_title := Label.new()
 	inventory_title.text = "FIELD INVENTORY  •  SHATTERED REACH"
 	inventory_title.add_theme_font_size_override("font_size", 17)
@@ -1117,10 +1130,45 @@ func _build_hud() -> void:
 	inventory_stack.add_child(inventory_title)
 	inventory_label = Label.new()
 	inventory_label.name = "InventoryContents"
-	inventory_label.custom_minimum_size = Vector2(340, 225)
-	inventory_label.add_theme_font_size_override("font_size", 15)
+	inventory_label.custom_minimum_size = Vector2(320, 128)
+	inventory_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_label.add_theme_font_size_override("font_size", 13)
 	inventory_label.add_theme_color_override("font_color", Color("#e0d0ad"))
 	inventory_stack.add_child(inventory_label)
+	var gear_heading := Label.new()
+	gear_heading.text = "LOOT ARMORY  •  SELECT TO COMPARE"
+	gear_heading.add_theme_font_size_override("font_size", 14)
+	gear_heading.add_theme_color_override("font_color", Color("#79d9cc"))
+	inventory_stack.add_child(gear_heading)
+	gear_sort_option = OptionButton.new()
+	gear_sort_option.name = "GearSortMode"
+	gear_sort_option.add_item("Newest first", 0)
+	gear_sort_option.add_item("Rarity: high to low", 1)
+	gear_sort_option.add_item("Best stats first", 2)
+	gear_sort_option.item_selected.connect(_on_gear_sort_changed)
+	inventory_stack.add_child(gear_sort_option)
+	var gear_list_scroll := ScrollContainer.new()
+	gear_list_scroll.name = "GearListScroll"
+	gear_list_scroll.custom_minimum_size = Vector2(0, 112)
+	gear_list_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_stack.add_child(gear_list_scroll)
+	gear_list_container = VBoxContainer.new()
+	gear_list_container.name = "GearList"
+	gear_list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gear_list_scroll.add_child(gear_list_container)
+	gear_detail_label = Label.new()
+	gear_detail_label.name = "GearComparisonCard"
+	gear_detail_label.custom_minimum_size = Vector2(0, 72)
+	gear_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	gear_detail_label.add_theme_font_size_override("font_size", 13)
+	gear_detail_label.add_theme_color_override("font_color", Color("#e7d8b5"))
+	inventory_stack.add_child(gear_detail_label)
+	equip_selected_gear_button = Button.new()
+	equip_selected_gear_button.name = "EquipSelectedGear"
+	equip_selected_gear_button.custom_minimum_size = Vector2(0, 36)
+	equip_selected_gear_button.text = "EQUIP SELECTED ITEM"
+	equip_selected_gear_button.pressed.connect(_equip_selected_loot)
+	inventory_stack.add_child(equip_selected_gear_button)
 	var craft_weapon_button := Button.new()
 	craft_weapon_button.text = "CRAFT / EQUIP  •  ASHEN BLADE"
 	craft_weapon_button.pressed.connect(_craft_weapon)
@@ -2393,6 +2441,102 @@ func _gear_stat_summary(item: Dictionary) -> String:
 		return "+%d ATK" % int(item.get("attack", 0))
 	return "+%d HP / -%d DMG" % [int(item.get("hp", 0)), int(item.get("mitigation", 0))]
 
+
+func _on_gear_sort_changed(index: int) -> void:
+	gear_sort_mode = clampi(index, 0, 2)
+	_refresh_gear_inventory_ui()
+
+func _select_loot_gear(item_id: int) -> void:
+	selected_gear_id = item_id
+	_refresh_gear_inventory_ui()
+
+func _selected_loot_gear() -> Dictionary:
+	for item in loot_gear:
+		if int(item.get("id", 0)) == selected_gear_id:
+			return item
+	return {}
+
+func _refresh_gear_inventory_ui() -> void:
+	if gear_list_container == null:
+		return
+	for child in gear_list_container.get_children():
+		gear_list_container.remove_child(child)
+		child.queue_free()
+	var sorted_items: Array[Dictionary] = []
+	for item in loot_gear:
+		sorted_items.append(item)
+	match gear_sort_mode:
+		1:
+			sorted_items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				var ar := _rarity_rank(str(a.get("rarity", "Common")))
+				var br := _rarity_rank(str(b.get("rarity", "Common")))
+				if ar == br:
+					return _gear_score(a) > _gear_score(b)
+				return ar > br
+			)
+		2:
+			sorted_items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				return _gear_score(a) > _gear_score(b)
+			)
+		_:
+			sorted_items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				return int(a.get("id", 0)) > int(b.get("id", 0))
+			)
+	for item in sorted_items:
+		var item_id := int(item.get("id", 0))
+		var slot := str(item.get("slot", "weapon"))
+		var equipped_id := equipped_loot_weapon_id if slot == "weapon" else equipped_loot_armor_id
+		var rarity := str(item.get("rarity", "Common"))
+		var item_button := Button.new()
+		item_button.name = "LootGear_%d" % item_id
+		item_button.custom_minimum_size = Vector2(0, 38)
+		item_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var prefix := "✓ " if item_id == equipped_id else ("▸ " if item_id == selected_gear_id else "")
+		item_button.text = "%s%s  •  %s  •  %s  •  %s" % [prefix, rarity.to_upper(), str(item.get("name", "Unknown")), slot.to_upper(), _gear_stat_summary(item)]
+		item_button.add_theme_color_override("font_color", _rarity_color(rarity))
+		item_button.pressed.connect(_select_loot_gear.bind(item_id))
+		gear_list_container.add_child(item_button)
+	if gear_sort_option != null and gear_sort_option.selected != gear_sort_mode:
+		gear_sort_option.select(gear_sort_mode)
+	var selected := _selected_loot_gear()
+	if selected.is_empty() and not loot_gear.is_empty():
+		selected = sorted_items[0]
+		selected_gear_id = int(selected.get("id", 0))
+	if selected.is_empty():
+		gear_detail_label.text = "No dropped equipment yet. Hunt Ash Wolves and Ruin Stalkers, or defeat the Frost Warden."
+		equip_selected_gear_button.disabled = true
+		equip_selected_gear_button.text = "EQUIP SELECTED ITEM"
+		return
+	var selected_slot := str(selected.get("slot", "weapon"))
+	var equipped := _equipped_loot_gear(selected_slot)
+	var stat_name := "ATK" if selected_slot == "weapon" else "HP / MITIGATION"
+	var current_text := "No loot item equipped"
+	var delta_text := "New slot bonus"
+	if not equipped.is_empty():
+		current_text = "%s %s (%s)" % [str(equipped.get("rarity", "Common")).to_upper(), str(equipped.get("name", "Gear")), _gear_stat_summary(equipped)]
+		var delta := _gear_score(selected) - _gear_score(equipped)
+		delta_text = ("+" if delta > 0 else "") + str(delta) + " gear score"
+	gear_detail_label.text = "%s %s  •  %s\nSELECTED: %s\nEQUIPPED: %s\nCOMPARISON: %s" % [str(selected.get("rarity", "Common")).to_upper(), str(selected.get("slot", "weapon")).to_upper(), stat_name, _gear_stat_summary(selected), current_text, delta_text]
+	var already_equipped := int(selected.get("id", 0)) == (equipped_loot_weapon_id if selected_slot == "weapon" else equipped_loot_armor_id)
+	equip_selected_gear_button.disabled = already_equipped
+	equip_selected_gear_button.text = "CURRENTLY EQUIPPED" if already_equipped else "EQUIP SELECTED  •  %s" % str(selected.get("name", "ITEM")).to_upper()
+
+func _equip_selected_loot() -> void:
+	var item := _selected_loot_gear()
+	if item.is_empty():
+		return
+	var slot := str(item.get("slot", "weapon"))
+	if slot == "weapon":
+		equipped_loot_weapon_id = int(item.get("id", 0))
+	else:
+		equipped_loot_armor_id = int(item.get("id", 0))
+	_recalculate_derived_stats(true)
+	_refresh_equipment_visuals()
+	_refresh_progression_ui()
+	_save_progress()
+	if status_label != null:
+		status_label.text = "EQUIPPED %s  •  %s  •  %s" % [str(item.get("rarity", "Common")).to_upper(), str(item.get("name", "GEAR")), _gear_stat_summary(item)]
+
 func _equipped_loot_gear(slot: String) -> Dictionary:
 	var wanted_id := equipped_loot_weapon_id if slot == "weapon" else equipped_loot_armor_id
 	if wanted_id <= 0:
@@ -2583,6 +2727,7 @@ func _refresh_progression_ui() -> void:
 		lines.append("ARMOR: 3 Pelts + 2 Cores + 35 coins")
 		lines.append(_quest_description())
 		inventory_label.text = "\n".join(lines)
+	_refresh_gear_inventory_ui()
 	if loot_weapon_button != null:
 		var best_weapon := _best_loot_item("weapon")
 		loot_weapon_button.text = "EQUIP BEST WEAPON  •  %s" % str(best_weapon.get("name", "NONE FOUND"))
