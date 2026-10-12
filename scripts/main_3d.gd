@@ -38,6 +38,7 @@ var gear_list_container: VBoxContainer
 var gear_detail_label: Label
 var equip_selected_gear_button: Button
 var salvage_selected_gear_button: Button
+var enhance_selected_gear_button: Button
 var selected_gear_id := 0
 var gear_sort_mode := 0
 var boss_first_kill_claimed := false
@@ -708,7 +709,7 @@ func _base_class_hp() -> int:
 func _recalculate_derived_stats(heal_increased_capacity: bool = false) -> void:
 	var previous_max_hp := player_max_hp
 	var equipped_armor := _equipped_loot_gear("armor")
-	player_max_hp = _base_class_hp() + armor_level * 18 + vitality_rank * 8 + int(equipped_armor.get("hp", 0))
+	player_max_hp = _base_class_hp() + armor_level * 18 + vitality_rank * 8 + _gear_hp(equipped_armor)
 	if heal_increased_capacity and player_max_hp > previous_max_hp:
 		player_hp = mini(player_max_hp, player_hp + player_max_hp - previous_max_hp)
 	else:
@@ -1159,7 +1160,7 @@ func _build_hud() -> void:
 	gear_list_scroll.add_child(gear_list_container)
 	gear_detail_label = Label.new()
 	gear_detail_label.name = "GearComparisonCard"
-	gear_detail_label.custom_minimum_size = Vector2(0, 72)
+	gear_detail_label.custom_minimum_size = Vector2(0, 104)
 	gear_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	gear_detail_label.add_theme_font_size_override("font_size", 13)
 	gear_detail_label.add_theme_color_override("font_color", Color("#e7d8b5"))
@@ -1176,6 +1177,12 @@ func _build_hud() -> void:
 	salvage_selected_gear_button.text = "DISMANTLE SELECTED GEAR"
 	salvage_selected_gear_button.pressed.connect(_salvage_selected_loot)
 	inventory_stack.add_child(salvage_selected_gear_button)
+	enhance_selected_gear_button = Button.new()
+	enhance_selected_gear_button.name = "EnhanceSelectedGear"
+	enhance_selected_gear_button.custom_minimum_size = Vector2(0, 38)
+	enhance_selected_gear_button.text = "ENHANCE SELECTED GEAR"
+	enhance_selected_gear_button.pressed.connect(_enhance_selected_loot)
+	inventory_stack.add_child(enhance_selected_gear_button)
 	var craft_weapon_button := Button.new()
 	craft_weapon_button.text = "CRAFT / EQUIP  •  ASHEN BLADE"
 	craft_weapon_button.pressed.connect(_craft_weapon)
@@ -2262,21 +2269,21 @@ func _nearest_enemy() -> Node3D:
 
 func _basic_attack_damage() -> int:
 	var equipped_weapon := _equipped_loot_gear("weapon")
-	var damage := 34 + weapon_level * 9 + strength_rank * 3 + int(equipped_weapon.get("attack", 0))
+	var damage := 34 + weapon_level * 9 + strength_rank * 3 + _gear_attack(equipped_weapon)
 	if character_class == "Ranger":
 		damage = int(round(float(damage) * 0.9))
 	return damage
 
 func _signature_skill_damage() -> int:
 	var equipped_weapon := _equipped_loot_gear("weapon")
-	var damage := int(round(float(58 + weapon_level * 14 + strength_rank * 3 + int(equipped_weapon.get("attack", 0))) * (1.0 + float(signature_skill_rank - 1) * 0.12)))
+	var damage := int(round(float(58 + weapon_level * 14 + strength_rank * 3 + _gear_attack(equipped_weapon)) * (1.0 + float(signature_skill_rank - 1) * 0.12)))
 	if character_class == "Arcanist":
 		damage = int(round(float(damage) * 1.35))
 	return damage
 
 func _armor_mitigation() -> int:
 	var equipped_armor := _equipped_loot_gear("armor")
-	return mini(18, armor_level * 3 + int(equipped_armor.get("mitigation", 0)))
+	return mini(18, armor_level * 3 + _gear_mitigation(equipped_armor))
 
 func _equipment_tier_name(rank: int, is_weapon: bool) -> String:
 	if rank >= 5:
@@ -2444,10 +2451,11 @@ func _rarity_color(rarity: String) -> Color:
 		_: return Color("#d8e0d5")
 
 func _gear_stat_summary(item: Dictionary) -> String:
+	var level := clampi(int(item.get("enhancement_level", 0)), 0, 10)
+	var prefix := "+%d • " % level if level > 0 else ""
 	if str(item.get("slot", "")) == "weapon":
-		return "+%d ATK" % int(item.get("attack", 0))
-	return "+%d HP / -%d DMG" % [int(item.get("hp", 0)), int(item.get("mitigation", 0))]
-
+		return "%s+%d ATK" % [prefix, _gear_attack(item)]
+	return "%s+%d HP / -%d DMG" % [prefix, _gear_hp(item), _gear_mitigation(item)]
 
 func _on_gear_sort_changed(index: int) -> void:
 	gear_sort_mode = clampi(index, 0, 2)
@@ -2499,7 +2507,7 @@ func _refresh_gear_inventory_ui() -> void:
 		item_button.custom_minimum_size = Vector2(0, 38)
 		item_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var prefix := "✓ " if item_id == equipped_id else ("▸ " if item_id == selected_gear_id else "")
-		item_button.text = "%s%s  •  %s  •  %s  •  %s" % [prefix, rarity.to_upper(), str(item.get("name", "Unknown")), slot.to_upper(), _gear_stat_summary(item)]
+		item_button.text = "%s%s  •  %s%s  •  %s  •  %s" % [prefix, rarity.to_upper(), str(item.get("name", "Unknown")), (" +" + str(item.get("enhancement_level", 0))) if int(item.get("enhancement_level", 0)) > 0 else "", slot.to_upper(), _gear_stat_summary(item)]
 		item_button.add_theme_color_override("font_color", _rarity_color(rarity))
 		item_button.pressed.connect(_select_loot_gear.bind(item_id))
 		gear_list_container.add_child(item_button)
@@ -2528,19 +2536,25 @@ func _refresh_gear_inventory_ui() -> void:
 	if not equipped.is_empty():
 		current_text = "%s %s (%s)" % [str(equipped.get("rarity", "Common")).to_upper(), str(equipped.get("name", "Gear")), _gear_stat_summary(equipped)]
 		if selected_slot == "weapon":
-			var attack_delta := int(selected.get("attack", 0)) - int(equipped.get("attack", 0))
+			var attack_delta := _gear_attack(selected) - _gear_attack(equipped)
 			delta_text = "%s%d ATK • basic/skill damage %s%d" % ["+" if attack_delta > 0 else "", attack_delta, "+" if attack_delta > 0 else "", attack_delta]
 		else:
-			var hp_delta := int(selected.get("hp", 0)) - int(equipped.get("hp", 0))
-			var mitigation_delta := int(selected.get("mitigation", 0)) - int(equipped.get("mitigation", 0))
+			var hp_delta := _gear_hp(selected) - _gear_hp(equipped)
+			var mitigation_delta := _gear_mitigation(selected) - _gear_mitigation(equipped)
 			delta_text = "%s%d max HP • %s%d damage reduction" % ["+" if hp_delta > 0 else "", hp_delta, "+" if mitigation_delta > 0 else "", mitigation_delta]
-	gear_detail_label.text = "%s %s  •  %s\nSELECTED: %s\nEQUIPPED: %s\nACTUAL BONUS CHANGE: %s" % [str(selected.get("rarity", "Common")).to_upper(), str(selected.get("slot", "weapon")).to_upper(), stat_name, _gear_stat_summary(selected), current_text, delta_text]
+	var enhancement_cost := _gear_enhancement_cost(selected)
+	var enhancement_level := clampi(int(selected.get("enhancement_level", 0)), 0, 10)
+	var enhancement_line := "MAX ENHANCEMENT +10" if enhancement_level >= 10 else "NEXT +%d: %d COINS • %d %s • %d %s" % [enhancement_level + 1, int(enhancement_cost["coins"]), int(enhancement_cost["primary_count"]), str(enhancement_cost["primary_name"]).to_upper(), int(enhancement_cost["secondary_count"]), str(enhancement_cost["secondary_name"]).to_upper()]
+	gear_detail_label.text = "%s %s  •  %s\nSELECTED: %s\nEQUIPPED: %s\nACTUAL BONUS CHANGE: %s\n%s" % [str(selected.get("rarity", "Common")).to_upper(), str(selected.get("slot", "weapon")).to_upper(), stat_name, _gear_stat_summary(selected), current_text, delta_text, enhancement_line]
 	var already_equipped := int(selected.get("id", 0)) == (equipped_loot_weapon_id if selected_slot == "weapon" else equipped_loot_armor_id)
 	equip_selected_gear_button.disabled = already_equipped
 	equip_selected_gear_button.text = "CURRENTLY EQUIPPED" if already_equipped else "EQUIP SELECTED  •  %s" % str(selected.get("name", "ITEM")).to_upper()
 	if salvage_selected_gear_button != null:
 		salvage_selected_gear_button.disabled = already_equipped
-		salvage_selected_gear_button.text = "EQUIPPED — CANNOT DISMANTLE" if already_equipped else "DISMANTLE FOR %d COINS + MATERIALS" % _gear_salvage_coins(selected)
+		salvage_selected_gear_button.text = "EQUIPPED — CANNOT DISMANTLE" if already_equipped else "DISMANTLE FOR %d COINS + MATERIALS" % (_gear_salvage_coins(selected) + enhancement_level * 8)
+	if enhance_selected_gear_button != null:
+		enhance_selected_gear_button.disabled = enhancement_level >= 10
+		enhance_selected_gear_button.text = "MAX ENHANCEMENT +10" if enhancement_level >= 10 else "ENHANCE TO +%d" % (enhancement_level + 1)
 
 func _equip_selected_loot() -> void:
 	var item := _selected_loot_gear()
@@ -2598,10 +2612,63 @@ func _equipped_loot_gear(slot: String) -> Dictionary:
 			return item
 	return {}
 
+func _gear_attack(item: Dictionary) -> int:
+	return int(item.get("attack", 0)) + clampi(int(item.get("enhancement_level", 0)), 0, 10) * 2
+
+func _gear_hp(item: Dictionary) -> int:
+	return int(item.get("hp", 0)) + clampi(int(item.get("enhancement_level", 0)), 0, 10) * 8
+
+func _gear_mitigation(item: Dictionary) -> int:
+	return int(item.get("mitigation", 0)) + int(floor(float(clampi(int(item.get("enhancement_level", 0)), 0, 10)) / 3.0))
+
+func _gear_enhancement_cost(item: Dictionary) -> Dictionary:
+	var level := clampi(int(item.get("enhancement_level", 0)), 0, 10)
+	var slot := str(item.get("slot", "weapon"))
+	return {
+		"coins": 35 + level * 25 + _rarity_rank(str(item.get("rarity", "Common"))) * 5,
+		"primary_name": "Ancient Shard" if slot == "weapon" else "Ruin Core",
+		"primary_count": 1 + int(level >= 3) + int(level >= 7),
+		"secondary_name": "Ashen Pelt" if slot == "weapon" else "Echo Fragment",
+		"secondary_count": 1 + int(level >= 5)
+	}
+
+func _enhance_selected_loot() -> void:
+	var item := _selected_loot_gear()
+	if item.is_empty():
+		return
+	var level := clampi(int(item.get("enhancement_level", 0)), 0, 10)
+	if level >= 10:
+		if status_label != null:
+			status_label.text = "ENHANCEMENT MAXIMUM REACHED  •  +10"
+		return
+	var cost := _gear_enhancement_cost(item)
+	var primary_name := str(cost["primary_name"])
+	var secondary_name := str(cost["secondary_name"])
+	if coins < int(cost["coins"]) or int(inventory.get(primary_name, 0)) < int(cost["primary_count"]) or int(inventory.get(secondary_name, 0)) < int(cost["secondary_count"]):
+		if status_label != null:
+			status_label.text = "NEED %d COINS, %d %s, %d %s" % [int(cost["coins"]), int(cost["primary_count"]), primary_name.to_upper(), int(cost["secondary_count"]), secondary_name.to_upper()]
+		return
+	coins -= int(cost["coins"])
+	inventory[primary_name] = int(inventory.get(primary_name, 0)) - int(cost["primary_count"])
+	inventory[secondary_name] = int(inventory.get(secondary_name, 0)) - int(cost["secondary_count"])
+	item["enhancement_level"] = level + 1
+	for i in range(loot_gear.size()):
+		if int(loot_gear[i].get("id", 0)) == int(item.get("id", 0)):
+			loot_gear[i] = item
+			break
+	_recalculate_derived_stats(true)
+	_refresh_equipment_visuals()
+	_refresh_progression_ui()
+	_save_progress()
+	if status_label != null:
+		status_label.text = "GEAR ENHANCED  •  +%d  •  %s" % [level + 1, str(item.get("name", "GEAR")).to_upper()]
+	if profile_panel != null and profile_panel.visible and profile_tab == "EQUIPMENT":
+		_show_profile_tab("EQUIPMENT")
+
 func _gear_score(item: Dictionary) -> int:
 	if str(item.get("slot", "")) == "weapon":
-		return int(item.get("attack", 0)) * 10 + _rarity_rank(str(item.get("rarity", "Common")))
-	return int(item.get("hp", 0)) + int(item.get("mitigation", 0)) * 12 + _rarity_rank(str(item.get("rarity", "Common")))
+		return _gear_attack(item) * 10 + _rarity_rank(str(item.get("rarity", "Common")))
+	return _gear_hp(item) + _gear_mitigation(item) * 12 + _rarity_rank(str(item.get("rarity", "Common")))
 
 func _best_loot_item(slot: String) -> Dictionary:
 	var best: Dictionary = {}
@@ -2634,6 +2701,7 @@ func _create_loot_gear(slot: String, source: String, forced_rarity: String = "")
 		"slot": slot,
 		"rarity": rarity,
 		"source": source,
+		"enhancement_level": 1 if source == "Frost Warden" else 0,
 		"attack": rng.randi_range(2, 4) + (rank - 1) * 2 if slot == "weapon" else 0,
 		"hp": rng.randi_range(4, 10) + (rank - 1) * 6 if slot == "armor" else 0,
 		"mitigation": 1 + int(floor(float(rank - 1) / 2.0)) if slot == "armor" else 0
@@ -2686,7 +2754,9 @@ func _roll_enemy_loot(enemy: Node3D) -> void:
 		inventory["Frost Sigil"] = int(inventory.get("Frost Sigil", 0)) + 1
 		inventory["Echo Fragment"] = int(inventory.get("Echo Fragment", 0)) + 4
 		inventory["Ruin Core"] = int(inventory.get("Ruin Core", 0)) + 3
-		gained.append_array(["Warden Emblem", "Frost Sigil", "Echo Fragment ×4", "Ruin Core ×3"])
+		inventory["Ancient Shard"] = int(inventory.get("Ancient Shard", 0)) + 2
+		inventory["Ashen Pelt"] = int(inventory.get("Ashen Pelt", 0)) + 2
+		gained.append_array(["Warden Emblem", "Frost Sigil", "Echo Fragment ×4", "Ruin Core ×3", "Ancient Shard ×2", "Ashen Pelt ×2"])
 		coins += 300
 		_gain_xp(350)
 		if not boss_first_kill_claimed:
@@ -2949,6 +3019,7 @@ func _load_progress() -> void:
 				"slot": slot,
 				"rarity": rarity,
 				"source": str(saved_item.get("source", "Unknown")).substr(0, 64),
+				"enhancement_level": clampi(int(saved_item.get("enhancement_level", 0)), 0, 10),
 				"attack": clampi(int(saved_item.get("attack", 0)), 0, 100),
 				"hp": clampi(int(saved_item.get("hp", 0)), 0, 500),
 				"mitigation": clampi(int(saved_item.get("mitigation", 0)), 0, 30)
