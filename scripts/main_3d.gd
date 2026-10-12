@@ -1181,10 +1181,8 @@ func _show_profile_tab(tab_name: String) -> void:
 	match tab_name:
 		"STATS":
 			profile_title_label.text = "CHARACTER ATTRIBUTES"
-			var attack_power := 34 + weapon_level * 9 + strength_rank * 3
-			var skill_power := int(round(float(58 + weapon_level * 14 + strength_rank * 3) * (1.0 + float(signature_skill_rank - 1) * 0.12)))
-			if character_class == "Arcanist":
-				skill_power = int(round(float(skill_power) * 1.35))
+			var attack_power := _basic_attack_damage()
+			var skill_power := _signature_skill_damage()
 			profile_content_label.text = "NAME     %s\nCLASS    %s\nLEVEL    %d\nEXPERIENCE    %d / %d\n\nVITALITY RANK    %d\nMAX HP    %d / %d\nARMOR    %d upgrade rank\nPOWER RANK    %d\nUNSPENT ATTRIBUTE POINTS    %d\n\nCOMBAT RATINGS\nBasic strike    %d damage\nSignature skill    %d damage\nWeapon rank    %d / 5\nArmor rank    %d / 5\n\nWALLET\nCoins    %d" % [character_name, character_class, player_level, xp, xp_to_next_level, vitality_rank, player_hp, player_max_hp, armor_level, strength_rank, stat_points, attack_power, skill_power, weapon_level, armor_level, coins]
 			profile_power_button.text = "POWER +1  •  %d POINTS" % stat_points
 			profile_power_button.disabled = stat_points <= 0 or strength_rank >= 50
@@ -1200,7 +1198,7 @@ func _show_profile_tab(tab_name: String) -> void:
 			elif character_class == "Ranger":
 				class_skill = "Duskstrider Cut"
 				class_passive = "Basic attack cooldown reduced; movement speed +15%"
-			profile_content_label.text = "CLASS SIGNATURE\n%s\nRank %d / 5  •  Cooldown: 4.0 seconds\nBase damage: %d\n\nBASIC ATTACK\nSword Strike\nCooldown: 0.48 seconds (0.36 Ranger)\n\nEVASION\nDodge Roll\n2.8-second cooldown • 0.32-second invulnerability\n\nULTIMATE\nAncient Oath\nHigh-impact strike; class modifiers apply\n\nCLASS TRAIT\n%s\n\nSKILL POINTS AVAILABLE    %d\nUpgrade signature skill to increase its damage by 12%% per rank." % [class_skill, signature_skill_rank, int(round(float(58 + weapon_level * 14) * (1.0 + float(signature_skill_rank - 1) * 0.12))), class_passive, skill_points]
+			profile_content_label.text = "CLASS SIGNATURE\n%s\nRank %d / 5  •  Cooldown: 4.0 seconds\nBase damage: %d\n\nBASIC ATTACK\nSword Strike\nCooldown: 0.48 seconds (0.36 Ranger)\n\nEVASION\nDodge Roll\n2.8-second cooldown • 0.32-second invulnerability\n\nULTIMATE\nAncient Oath\nHigh-impact strike; class modifiers apply\n\nCLASS TRAIT\n%s\n\nSKILL POINTS AVAILABLE    %d\nUpgrade signature skill to increase its damage by 12%% per rank." % [class_skill, signature_skill_rank, _signature_skill_damage(), class_passive, skill_points]
 			profile_skill_button.text = "UPGRADE SIGNATURE  •  %d POINTS" % skill_points
 			profile_skill_button.disabled = skill_points <= 0 or signature_skill_rank >= 5
 		"EQUIPMENT":
@@ -1209,7 +1207,7 @@ func _show_profile_tab(tab_name: String) -> void:
 			var blade_pelts := int(inventory.get("Ashen Pelt", 0))
 			var armor_pelts := int(inventory.get("Ashen Pelt", 0))
 			var armor_cores := int(inventory.get("Ruin Core", 0))
-			profile_content_label.text = "EQUIPPED GEAR\nAshen Blade  •  Rank %d / 5\nAttack bonus  +%d\n\nRuin Armor  •  Rank %d / 5\nMaximum HP  +%d\nDamage mitigation  %d\n\nFORGE REQUIREMENTS\nAshen Blade: 3 Ancient Shards, 2 Ashen Pelts, 35 coins\nOwned: %d / 3 shards  •  %d / 2 pelts\n\nRuin Armor: 3 Ashen Pelts, 2 Ruin Cores, 35 coins\nOwned: %d / 3 pelts  •  %d / 2 cores\n\nCurrent wallet: %d coins\nBoth items can be upgraded to rank 5." % [weapon_level, weapon_level * 9, armor_level, armor_level * 18, mini(12, armor_level * 3), blade_shards, blade_pelts, armor_pelts, armor_cores, coins]
+			profile_content_label.text = "EQUIPPED GEAR\nAshen Blade  •  Rank %d / 5\nAttack bonus  +%d\n\nRuin Armor  •  Rank %d / 5\nMaximum HP  +%d\nDamage mitigation  %d\n\nFORGE REQUIREMENTS\nAshen Blade: 3 Ancient Shards, 2 Ashen Pelts, 35 coins\nOwned: %d / 3 shards  •  %d / 2 pelts\n\nRuin Armor: 3 Ashen Pelts, 2 Ruin Cores, 35 coins\nOwned: %d / 3 pelts  •  %d / 2 cores\n\nCurrent wallet: %d coins\nBoth items can be upgraded to rank 5." % [weapon_level, weapon_level * 9, armor_level, armor_level * 18, _armor_mitigation(), blade_shards, blade_pelts, armor_pelts, armor_cores, coins]
 			profile_weapon_button.text = "FORGE ASHEN BLADE  •  35 COINS"
 			profile_weapon_button.disabled = weapon_level >= 5 or blade_shards < 3 or blade_pelts < 2 or coins < 35
 			profile_armor_button.text = "UPGRADE RUIN ARMOR  •  35 COINS"
@@ -1848,7 +1846,7 @@ func _take_frost_damage(amount: int, attack_name: String = "FROST ATTACK") -> vo
 		if status_label != null:
 			status_label.text = "PERFECT EVADE  •  %s" % attack_name
 		return
-	var mitigation := mini(12, armor_level * 3)
+	var mitigation := _armor_mitigation()
 	var damage := maxi(8, amount - mitigation)
 	player_hp = maxi(0, player_hp - damage)
 	if player_hp <= 0:
@@ -2038,15 +2036,28 @@ func _nearest_enemy() -> Node3D:
 				best = enemy
 	return best
 
+func _basic_attack_damage() -> int:
+	var damage := 34 + weapon_level * 9 + strength_rank * 3
+	if character_class == "Ranger":
+		damage = int(round(float(damage) * 0.9))
+	return damage
+
+func _signature_skill_damage() -> int:
+	var damage := int(round(float(58 + weapon_level * 14 + strength_rank * 3) * (1.0 + float(signature_skill_rank - 1) * 0.12)))
+	if character_class == "Arcanist":
+		damage = int(round(float(damage) * 1.35))
+	return damage
+
+func _armor_mitigation() -> int:
+	return mini(12, armor_level * 3)
+
 func _attack() -> void:
 	if attack_cooldown > 0.0: return
 	_spawn_combat_effect("slash")
 	attack_cooldown = 0.36 if character_class == "Ranger" else 0.48
 	var target := _nearest_enemy()
 	if target != null:
-		var damage := 34 + weapon_level * 9 + strength_rank * 3
-		if character_class == "Ranger":
-			damage = int(round(float(damage) * 0.9))
+		var damage := _basic_attack_damage()
 		_damage_enemy(target, damage)
 		status_label.text = "%s STRIKE  •  %d DAMAGE" % [character_class.to_upper(), damage]
 	else:
@@ -2060,9 +2071,7 @@ func _skill() -> void:
 	skill_cooldown = 4.0
 	var target := _nearest_enemy()
 	if target != null:
-		var damage := int(round(float(58 + weapon_level * 14 + strength_rank * 3) * (1.0 + float(signature_skill_rank - 1) * 0.12)))
-		if character_class == "Arcanist":
-			damage = int(round(float(damage) * 1.35))
+		var damage := _signature_skill_damage()
 		_damage_enemy(target, damage)
 		status_label.text = "%s SKILL  •  %d DAMAGE" % [character_class.to_upper(), damage]
 	else:
@@ -2259,8 +2268,9 @@ func _refresh_progression_ui() -> void:
 			lines.append("%s  × %d" % [item_name, int(inventory.get(item_name, 0))])
 		lines.append("")
 		lines.append("EQUIPMENT")
-		lines.append("Ashen Blade  Lv.%d  •  +%d attack" % [weapon_level, weapon_level * 9])
-		lines.append("Ruin Armor  Lv.%d  •  +%d max HP" % [armor_level, armor_level * 18])
+		lines.append("Ashen Blade  Lv.%d / 5  •  +%d attack" % [weapon_level, weapon_level * 9])
+		lines.append("Ruin Armor  Lv.%d / 5  •  +%d max HP  •  -%d incoming damage" % [armor_level, armor_level * 18, _armor_mitigation()])
+		lines.append("Combat preview  •  Basic %d  /  Signature %d" % [_basic_attack_damage(), _signature_skill_damage()])
 		lines.append("WEAPON: 3 Shards + 2 Pelts + 35 coins")
 		lines.append("ARMOR: 3 Pelts + 2 Cores + 35 coins")
 		lines.append("ELITE DROP: Warden Emblem  •  25%")
