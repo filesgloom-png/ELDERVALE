@@ -8,6 +8,10 @@ const MOVE_SPEED := 5.2
 const WORLD_LIMIT := 42.0
 var player: Node3D
 var camera: Camera3D
+var camera_yaw := 0.0
+var camera_pitch := deg_to_rad(-24.0)
+var camera_touch_index := -1
+var camera_touch_last := Vector2.ZERO
 var move_input := Vector2.ZERO
 var touch_origin := Vector2.ZERO
 var touch_index := -1
@@ -691,10 +695,12 @@ func _build_player() -> void:
 	camera.position = Vector3(0, 4.8, 7.4)
 	camera.rotation_degrees = Vector3(-28, 0, 0)
 	camera.current = true
-	player.add_child(camera)
-	camera.position = Vector3(0, 4.8, 7.4)
-	camera.rotation = Vector3(deg_to_rad(-25), 0, 0)
-	camera.fov = 62.0
+	add_child(camera)
+	camera.position = player.global_position + Vector3(0, 4.8, 7.4)
+	camera.rotation = Vector3(camera_pitch, 0, 0)
+	camera.fov = 58.0
+	camera.global_position = player.global_position + Vector3(0, 4.8, 7.4)
+	camera.look_at(player.global_position + Vector3(0, 1.0, 0), Vector3.UP)
 	_refresh_equipment_visuals()
 
 func _base_class_hp() -> int:
@@ -1219,7 +1225,7 @@ func _build_hud() -> void:
 	var help := Label.new()
 	help.name = "MobileControlHelp"
 	help.position = Vector2(24, 650)
-	help.text = "MOVE  •  LEFT SIDE      ATTACK  •  SKILL  •  DODGE"
+	help.text = "LEFT: MOVE  •  RIGHT: DRAG TO ROTATE CAMERA  •  ATTACK / SKILL / DODGE"
 	help.add_theme_font_size_override("font_size", 12)
 	help.add_theme_color_override("font_color", Color("#d7d6c0"))
 	layer.add_child(help)
@@ -1542,16 +1548,29 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_W, KEY_S, KEY_UP, KEY_DOWN: move_input.y = 0
 			KEY_A, KEY_D, KEY_LEFT, KEY_RIGHT: move_input.x = 0
 	elif event is InputEventScreenTouch:
-		if event.pressed and event.position.x < get_viewport().get_visible_rect().size.x * 0.38 and event.position.y > get_viewport().get_visible_rect().size.y * 0.48:
+		var viewport_size := get_viewport().get_visible_rect().size
+		if event.pressed and event.position.x < viewport_size.x * 0.42 and event.position.y > viewport_size.y * 0.42 and touch_index == -1:
 			touch_index = event.index
 			touch_origin = event.position
 			move_input = Vector2.ZERO
-		elif not event.pressed and event.index == touch_index:
-			touch_index = -1
-			move_input = Vector2.ZERO
-	elif event is InputEventScreenDrag and event.index == touch_index:
-		var drag_delta: Vector2 = event.position - touch_origin
-		move_input = Vector2(clampf(drag_delta.x / 70.0, -1.0, 1.0), clampf(drag_delta.y / 70.0, -1.0, 1.0))
+		elif event.pressed and event.position.x > viewport_size.x * 0.58 and camera_touch_index == -1:
+			camera_touch_index = event.index
+			camera_touch_last = event.position
+		elif not event.pressed:
+			if event.index == touch_index:
+				touch_index = -1
+				move_input = Vector2.ZERO
+			if event.index == camera_touch_index:
+				camera_touch_index = -1
+	elif event is InputEventScreenDrag:
+		if event.index == touch_index:
+			var drag_delta: Vector2 = event.position - touch_origin
+			move_input = Vector2(clampf(drag_delta.x / 62.0, -1.0, 1.0), clampf(drag_delta.y / 62.0, -1.0, 1.0))
+		elif event.index == camera_touch_index:
+			var camera_drag: Vector2 = event.position - camera_touch_last
+			camera_touch_last = event.position
+			camera_yaw = wrapf(camera_yaw - camera_drag.x * 0.008, -PI, PI)
+			camera_pitch = clampf(camera_pitch - camera_drag.y * 0.0045, deg_to_rad(-38.0), deg_to_rad(-12.0))
 
 func _process(delta: float) -> void:
 	if not game_started:
@@ -1621,15 +1640,22 @@ func _process(delta: float) -> void:
 		enemy_legs[i].rotation.x = sin(animation_time * 7.0 + float(i % 4) * PI * 0.5) * 0.16
 	for i in range(enemy_tails.size()):
 		enemy_tails[i].rotation.x = -0.8 + sin(animation_time * 3.2 + float(i)) * 0.12
-	if input_dir.length_squared() > 0.01:
-		var direction := Vector3(input_dir.x, 0, input_dir.y)
+	var camera_forward := Vector3(-sin(camera_yaw), 0.0, -cos(camera_yaw))
+	var camera_right := Vector3(cos(camera_yaw), 0.0, -sin(camera_yaw))
+	var direction := (camera_right * input_dir.x) + (camera_forward * -input_dir.y)
+	if direction.length_squared() > 1.0:
+		direction = direction.normalized()
+	if direction.length_squared() > 0.01:
 		player.position += direction * move_speed * delta
 		player.position.x = clampf(player.position.x, -WORLD_LIMIT, WORLD_LIMIT)
 		player.position.z = clampf(player.position.z, -WORLD_LIMIT, WORLD_LIMIT)
-		player.rotation.y = lerp_angle(player.rotation.y, atan2(direction.x, direction.z), minf(1.0, delta * 10.0))
-		camera.position = camera.position.lerp(Vector3(0, 4.8, 7.4), minf(1.0, delta * 4.0))
-		camera.rotation.x = lerp(camera.rotation.x, deg_to_rad(-25), minf(1.0, delta * 4.0))
-	camera.look_at(player.position + Vector3(0, 1.0, -2.0), Vector3.UP)
+		var target_yaw := atan2(-direction.x, -direction.z)
+		player.rotation.y = lerp_angle(player.rotation.y, target_yaw, minf(1.0, delta * 10.0))
+	var camera_offset := Vector3(sin(camera_yaw) * 7.4, 4.4, cos(camera_yaw) * 7.4)
+	var camera_target := player.global_position + camera_offset
+	camera.global_position = camera.global_position.lerp(camera_target, minf(1.0, delta * 6.0))
+	camera.rotation.x = camera_pitch
+	camera.look_at(player.global_position + Vector3(0, 1.05, 0), Vector3.UP)
 	for i in range(enemies.size()):
 		var enemy := enemies[i]
 		if not is_instance_valid(enemy): continue
