@@ -94,6 +94,8 @@ var signature_skill_rank := 1
 var profile_power_button: Button
 var profile_vitality_button: Button
 var profile_skill_button: Button
+var profile_weapon_button: Button
+var profile_armor_button: Button
 
 func _ready() -> void:
 	_load_progress()
@@ -1072,6 +1074,7 @@ func _build_hud() -> void:
 	_add_profile_tab(profile_tabs, "HERO")
 	_add_profile_tab(profile_tabs, "STATS")
 	_add_profile_tab(profile_tabs, "SKILLS")
+	_add_profile_tab(profile_tabs, "EQUIPMENT")
 	var help := Label.new()
 	help.position = Vector2(24, 650)
 	help.text = "MOVE  •  LEFT SIDE      ATTACK  •  SKILL  •  DODGE"
@@ -1148,6 +1151,16 @@ func _build_profile_panel(layer: CanvasLayer) -> void:
 	profile_skill_button.custom_minimum_size = Vector2(0, 38)
 	profile_skill_button.pressed.connect(_upgrade_signature_skill)
 	stack.add_child(profile_skill_button)
+	profile_weapon_button = Button.new()
+	profile_weapon_button.name = "ForgeAshenBlade"
+	profile_weapon_button.custom_minimum_size = Vector2(0, 38)
+	profile_weapon_button.pressed.connect(_craft_weapon)
+	stack.add_child(profile_weapon_button)
+	profile_armor_button = Button.new()
+	profile_armor_button.name = "UpgradeRuinArmor"
+	profile_armor_button.custom_minimum_size = Vector2(0, 38)
+	profile_armor_button.pressed.connect(_craft_armor)
+	stack.add_child(profile_armor_button)
 	var close := Button.new()
 	close.text = "RETURN TO REALM"
 	close.custom_minimum_size = Vector2(0, 44)
@@ -1163,6 +1176,8 @@ func _show_profile_tab(tab_name: String) -> void:
 	profile_power_button.visible = tab_name == "STATS"
 	profile_vitality_button.visible = tab_name == "STATS"
 	profile_skill_button.visible = tab_name == "SKILLS"
+	profile_weapon_button.visible = tab_name == "EQUIPMENT"
+	profile_armor_button.visible = tab_name == "EQUIPMENT"
 	match tab_name:
 		"STATS":
 			profile_title_label.text = "CHARACTER ATTRIBUTES"
@@ -1188,6 +1203,17 @@ func _show_profile_tab(tab_name: String) -> void:
 			profile_content_label.text = "CLASS SIGNATURE\n%s\nRank %d / 5  •  Cooldown: 4.0 seconds\nBase damage: %d\n\nBASIC ATTACK\nSword Strike\nCooldown: 0.48 seconds (0.36 Ranger)\n\nEVASION\nDodge Roll\n2.8-second cooldown • 0.32-second invulnerability\n\nULTIMATE\nAncient Oath\nHigh-impact strike; class modifiers apply\n\nCLASS TRAIT\n%s\n\nSKILL POINTS AVAILABLE    %d\nUpgrade signature skill to increase its damage by 12%% per rank." % [class_skill, signature_skill_rank, int(round(float(58 + weapon_level * 14) * (1.0 + float(signature_skill_rank - 1) * 0.12))), class_passive, skill_points]
 			profile_skill_button.text = "UPGRADE SIGNATURE  •  %d POINTS" % skill_points
 			profile_skill_button.disabled = skill_points <= 0 or signature_skill_rank >= 5
+		"EQUIPMENT":
+			profile_title_label.text = "EQUIPMENT & FORGE"
+			var blade_shards := int(inventory.get("Ancient Shard", 0))
+			var blade_pelts := int(inventory.get("Ashen Pelt", 0))
+			var armor_pelts := int(inventory.get("Ashen Pelt", 0))
+			var armor_cores := int(inventory.get("Ruin Core", 0))
+			profile_content_label.text = "EQUIPPED GEAR\nAshen Blade  •  Rank %d / 5\nAttack bonus  +%d\n\nRuin Armor  •  Rank %d / 5\nMaximum HP  +%d\nDamage mitigation  %d\n\nFORGE REQUIREMENTS\nAshen Blade: 3 Ancient Shards, 2 Ashen Pelts, 35 coins\nOwned: %d / 3 shards  •  %d / 2 pelts\n\nRuin Armor: 3 Ashen Pelts, 2 Ruin Cores, 35 coins\nOwned: %d / 3 pelts  •  %d / 2 cores\n\nCurrent wallet: %d coins\nBoth items can be upgraded to rank 5." % [weapon_level, weapon_level * 9, armor_level, armor_level * 18, mini(12, armor_level * 3), blade_shards, blade_pelts, armor_pelts, armor_cores, coins]
+			profile_weapon_button.text = "FORGE ASHEN BLADE  •  35 COINS"
+			profile_weapon_button.disabled = weapon_level >= 5 or blade_shards < 3 or blade_pelts < 2 or coins < 35
+			profile_armor_button.text = "UPGRADE RUIN ARMOR  •  35 COINS"
+			profile_armor_button.disabled = armor_level >= 5 or armor_pelts < 3 or armor_cores < 2 or coins < 35
 		_:
 			profile_title_label.text = "HERO PROFILE"
 			profile_content_label.text = "%s\n%s  •  LEVEL %d\n\nYOUR JOURNEY\nShattered Reach — ancient ruins\nCurrent story: %s\n\nEQUIPMENT\nAshen Blade  •  rank %d\nRuin Armor  •  rank %d\n\nCOLLECTION\nCoins: %d\nRecorded discoveries: %d\n\nChoose STATS for attributes or SKILLS for combat abilities." % [character_name, character_class, player_level, _quest_description(), weapon_level, armor_level, coins, codex_discoveries.size()]
@@ -2276,6 +2302,8 @@ func _craft_weapon() -> void:
 	status_label.text = "ASHEN BLADE FORGED  •  LEVEL %d  •  +%d ATTACK" % [weapon_level, weapon_level * 9]
 	_refresh_progression_ui()
 	_save_progress()
+	if profile_panel != null and profile_panel.visible:
+		_show_profile_tab("EQUIPMENT")
 
 func _craft_armor() -> void:
 	if armor_level >= 5:
@@ -2294,6 +2322,8 @@ func _craft_armor() -> void:
 	status_label.text = "RUIN ARMOR EQUIPPED  •  LEVEL %d  •  +%d MAX HP" % [armor_level, armor_level * 18]
 	_refresh_progression_ui()
 	_save_progress()
+	if profile_panel != null and profile_panel.visible:
+		_show_profile_tab("EQUIPMENT")
 
 func _quest_description() -> String:
 	match quest_stage:
