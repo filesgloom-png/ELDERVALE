@@ -1170,7 +1170,7 @@ func _show_profile_tab(tab_name: String) -> void:
 			var skill_power := int(round(float(58 + weapon_level * 14 + strength_rank * 3) * (1.0 + float(signature_skill_rank - 1) * 0.12)))
 			if character_class == "Arcanist":
 				skill_power = int(round(float(skill_power) * 1.35))
-			profile_content_label.text = "NAME     %s\\nCLASS    %s\\nLEVEL    %d\\nEXPERIENCE    %d / %d\\n\\nVITALITY RANK    %d\\nMAX HP    %d / %d\\nARMOR    %d upgrade rank\\nPOWER RANK    %d\\nUNSPENT ATTRIBUTE POINTS    %d\\n\\nCOMBAT RATINGS\\nBasic strike    %d damage\\nSignature skill    %d damage\\nWeapon rank    %d / 5\\nArmor rank    %d / 5\\n\\nWALLET\\nCoins    %d" % [character_name, character_class, player_level, xp, xp_to_next_level, vitality_rank, player_hp, player_max_hp, armor_level, strength_rank, stat_points, attack_power, skill_power, weapon_level, armor_level, coins]
+			profile_content_label.text = "NAME     %s\nCLASS    %s\nLEVEL    %d\nEXPERIENCE    %d / %d\n\nVITALITY RANK    %d\nMAX HP    %d / %d\nARMOR    %d upgrade rank\nPOWER RANK    %d\nUNSPENT ATTRIBUTE POINTS    %d\n\nCOMBAT RATINGS\nBasic strike    %d damage\nSignature skill    %d damage\nWeapon rank    %d / 5\nArmor rank    %d / 5\n\nWALLET\nCoins    %d" % [character_name, character_class, player_level, xp, xp_to_next_level, vitality_rank, player_hp, player_max_hp, armor_level, strength_rank, stat_points, attack_power, skill_power, weapon_level, armor_level, coins]
 			profile_power_button.text = "POWER +1  •  %d POINTS" % stat_points
 			profile_power_button.disabled = stat_points <= 0 or strength_rank >= 50
 			profile_vitality_button.text = "VITALITY +8 HP  •  %d POINTS" % stat_points
@@ -1185,7 +1185,7 @@ func _show_profile_tab(tab_name: String) -> void:
 			elif character_class == "Ranger":
 				class_skill = "Duskstrider Cut"
 				class_passive = "Basic attack cooldown reduced; movement speed +15%"
-			profile_content_label.text = "CLASS SIGNATURE\\n%s\\nRank %d / 5  •  Cooldown: 4.0 seconds\\nBase damage: %d\\n\\nBASIC ATTACK\\nSword Strike\\nCooldown: 0.48 seconds (0.36 Ranger)\\n\\nEVASION\\nDodge Roll\\n2.8-second cooldown • 0.32-second invulnerability\\n\\nULTIMATE\\nAncient Oath\\nHigh-impact strike; class modifiers apply\\n\\nCLASS TRAIT\\n%s\\n\\nSKILL POINTS AVAILABLE    %d\\nUpgrade signature skill to increase its damage by 12%% per rank." % [class_skill, signature_skill_rank, int(round(float(58 + weapon_level * 14) * (1.0 + float(signature_skill_rank - 1) * 0.12))), class_passive, skill_points]
+			profile_content_label.text = "CLASS SIGNATURE\n%s\nRank %d / 5  •  Cooldown: 4.0 seconds\nBase damage: %d\n\nBASIC ATTACK\nSword Strike\nCooldown: 0.48 seconds (0.36 Ranger)\n\nEVASION\nDodge Roll\n2.8-second cooldown • 0.32-second invulnerability\n\nULTIMATE\nAncient Oath\nHigh-impact strike; class modifiers apply\n\nCLASS TRAIT\n%s\n\nSKILL POINTS AVAILABLE    %d\nUpgrade signature skill to increase its damage by 12%% per rank." % [class_skill, signature_skill_rank, int(round(float(58 + weapon_level * 14) * (1.0 + float(signature_skill_rank - 1) * 0.12))), class_passive, skill_points]
 			profile_skill_button.text = "UPGRADE SIGNATURE  •  %d POINTS" % skill_points
 			profile_skill_button.disabled = skill_points <= 0 or signature_skill_rank >= 5
 		_:
