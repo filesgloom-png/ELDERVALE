@@ -689,6 +689,19 @@ func _refresh_equipment_visuals() -> void:
 			blade_mat.emission = Color("#5bded0") if weapon_level < 5 else Color("#ffb84f")
 			blade_mat.emission_energy_multiplier = 1.1 + float(weapon_level - 2) * 0.35
 		blade.material_override = blade_mat
+	var weapon_rune_mat := _mat(Color("#65f4e7") if weapon_level < 5 else Color("#ffca72"), 0.22, 0.35)
+	weapon_rune_mat.emission_enabled = true
+	weapon_rune_mat.emission = Color("#38d8d1") if weapon_level < 5 else Color("#ff9d38")
+	weapon_rune_mat.emission_energy_multiplier = 0.8 + float(weapon_level) * 0.28
+	for rune_index in range(2):
+		var rune_name := "WeaponRune%d" % rune_index
+		var weapon_rune := player.get_node_or_null(rune_name) as MeshInstance3D
+		if weapon_rune == null:
+			weapon_rune = _mesh_node(player, BoxMesh.new(), weapon_rune_mat, Vector3(0.82 + float(rune_index) * 0.055, 1.25, -0.205), rune_name)
+			weapon_rune.scale = Vector3(0.22, 0.035, 0.035)
+			weapon_rune.rotation.z = -0.28
+		weapon_rune.material_override = weapon_rune_mat
+		weapon_rune.visible = weapon_level >= 2
 	var breastplate := player.get_node_or_null("LayeredBreastplate") as MeshInstance3D
 	if breastplate != null:
 		breastplate.material_override = _mat(Color("#283c42") if armor_level < 2 else (Color("#477b78") if armor_level < 4 else Color("#a17a43")), 0.38, 0.48)
@@ -707,6 +720,25 @@ func _refresh_equipment_visuals() -> void:
 		shoulder_runes.scale = Vector3(0.72, 0.16, 0.42)
 	if shoulder_runes != null:
 		shoulder_runes.visible = armor_level >= 4
+	var armor_sigils := player.get_node_or_null("ArmorSigils") as MeshInstance3D
+	if armor_sigils == null:
+		var sigil_mat := _mat(Color("#75f1e7"), 0.25, 0.32)
+		sigil_mat.emission_enabled = true
+		sigil_mat.emission = Color("#48dcd4")
+		sigil_mat.emission_energy_multiplier = 1.0
+		armor_sigils = _mesh_node(player, TorusMesh.new(), sigil_mat, Vector3(0.0, 1.1, -0.47), "ArmorSigils")
+		var sigil_mesh := armor_sigils.mesh as TorusMesh
+		sigil_mesh.inner_radius = 0.18
+		sigil_mesh.outer_radius = 0.23
+		armor_sigils.scale = Vector3(1.0, 0.8, 0.35)
+		armor_sigils.rotation.x = deg_to_rad(90.0)
+		armor_sigils.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	armor_sigils.visible = armor_level >= 3
+	var armor_sigil_mat := _mat(Color("#75f1e7") if armor_level < 5 else Color("#ffd28b"), 0.25, 0.32)
+	armor_sigil_mat.emission_enabled = armor_level >= 3
+	armor_sigil_mat.emission = Color("#48dcd4") if armor_level < 5 else Color("#ffad48")
+	armor_sigil_mat.emission_energy_multiplier = 0.9 + float(armor_level) * 0.2
+	armor_sigils.material_override = armor_sigil_mat
 
 func _build_enemies() -> void:
 	wave_number += 1
@@ -2051,6 +2083,15 @@ func _signature_skill_damage() -> int:
 func _armor_mitigation() -> int:
 	return mini(12, armor_level * 3)
 
+func _equipment_tier_name(rank: int, is_weapon: bool) -> String:
+	if rank >= 5:
+		return "ASCENDANT" if is_weapon else "GLACIAL REGALIA"
+	if rank >= 3:
+		return "RUNEBOUND" if is_weapon else "WARDEN PLATE"
+	if rank >= 1:
+		return "TEMPERED" if is_weapon else "REINFORCED"
+	return "ASHEN" if is_weapon else "UNFORGED"
+
 func _attack() -> void:
 	if attack_cooldown > 0.0: return
 	_spawn_combat_effect("slash")
@@ -2268,8 +2309,9 @@ func _refresh_progression_ui() -> void:
 			lines.append("%s  × %d" % [item_name, int(inventory.get(item_name, 0))])
 		lines.append("")
 		lines.append("EQUIPMENT")
-		lines.append("Ashen Blade  Lv.%d / 5  •  +%d attack" % [weapon_level, weapon_level * 9])
+		lines.append("Ashen Blade  Lv.%d / 5  •  +%d attack  •  %s" % [weapon_level, weapon_level * 9, _equipment_tier_name(weapon_level, true)])
 		lines.append("Ruin Armor  Lv.%d / 5  •  +%d max HP  •  -%d incoming damage" % [armor_level, armor_level * 18, _armor_mitigation()])
+		lines.append("Armor appearance: %s" % _equipment_tier_name(armor_level, false))
 		lines.append("Combat preview  •  Basic %d  /  Signature %d" % [_basic_attack_damage(), _signature_skill_damage()])
 		lines.append("WEAPON: 3 Shards + 2 Pelts + 35 coins")
 		lines.append("ARMOR: 3 Pelts + 2 Cores + 35 coins")
