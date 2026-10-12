@@ -441,7 +441,7 @@ func _build_enemies() -> void:
 		enemy_health[enemy] = 650 if i == 4 else (75 if i < 3 else 110)
 		enemy_hit_timers[enemy] = 0.0
 		if enemy.name == "FrostWarden":
-			frost_warden_states[enemy] = {"cooldown": 2.8, "windup": 0.0, "marker": null, "target": Vector3.ZERO, "origin": enemy.position, "phase": 0, "attack": "nova", "next_attack": 0}
+			frost_warden_states[enemy] = {"cooldown": 2.8, "windup": 0.0, "marker": null, "target": Vector3.ZERO, "origin": enemy.position, "phase": 0, "attack": "nova", "next_attack": 0, "last_attack": "", "phase_shift": 0.0, "combo_step": 0}
 		enemy_base_colors[enemy] = hide_mat.albedo_color
 		_create_enemy_health_ui(enemy)
 
@@ -916,10 +916,29 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 			var phase_material := body.material_override as StandardMaterial3D
 			if phase_material != null:
 				enemy_base_colors[enemy] = phase_material.albedo_color
+		var phase_marker := state.get("marker") as Node3D
+		if is_instance_valid(phase_marker):
+			phase_marker.queue_free()
+		state["marker"] = null
+		state["windup"] = 0.0
+		state["recovery"] = 0.0
+		state["phase_shift"] = 1.05
+		state["cooldown"] = 1.45
 		_spawn_combat_effect("frost_phase", enemy.position + Vector3(0.0, 0.06, 0.0))
 		if status_label != null:
 			status_label.text = "FROST WARDEN ENRAGED  •  PHASE III" if phase == 2 else "FROST WARDEN AWAKENS  •  PHASE II"
 	_update_boss_hud(enemy)
+	var phase_shift_left := maxf(0.0, float(state.get("phase_shift", 0.0)) - delta)
+	state["phase_shift"] = phase_shift_left
+	if phase_shift_left > 0.0:
+		if boss_body != null:
+			var shift_pulse := 1.0 + 0.075 * sin(animation_time * 18.0)
+			boss_body.scale = Vector3.ONE * shift_pulse
+		if boss_core != null:
+			boss_core.rotation.y += delta * 5.0
+			boss_core.scale = Vector3(0.48, 0.58, 0.32) * (1.0 + 0.16 * sin(animation_time * 20.0))
+		frost_warden_states[enemy] = state
+		return
 	var windup := float(state.get("windup", 0.0))
 	var boss_body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
 	var boss_core := enemy.get_node_or_null("FrostCore") as MeshInstance3D
@@ -968,9 +987,11 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 				hit = _player_in_ice_lance(origin, target)
 				damage = 35 if phase == 2 else (28 if phase == 1 else 22)
 			else:
-				var ring_radius := 4.8 if phase == 2 else (4.2 if phase == 1 else 3.6)
-				hit = player.position.distance_to(enemy.position) <= ring_radius
-				damage = 38 if phase == 2 else (30 if phase == 1 else 24)
+				var ring_inner := 4.0 if phase == 2 else (3.4 if phase == 1 else 2.8)
+				var ring_outer := ring_inner + 0.55
+				var player_radius := Vector2(player.position.x - enemy.position.x, player.position.z - enemy.position.z).length()
+				hit = player_radius >= ring_inner and player_radius <= ring_outer
+				damage = 36 if phase == 2 else (29 if phase == 1 else 23)
 			if hit:
 				_take_frost_damage(damage, "FROST NOVA" if attack == "nova" else ("ICE LANCE" if attack == "lance" else "SHATTER RING"))
 				_spawn_combat_effect("hit", player.position + Vector3(0.0, 0.08, 0.0))
@@ -990,15 +1011,20 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 	var cooldown := float(state.get("cooldown", 2.8)) - delta
 	if cooldown <= 0.0:
 		var next_attack := int(state.get("next_attack", 0))
-		var attack := "nova" if next_attack % 3 == 0 else ("lance" if next_attack % 3 == 1 else "shatter")
+		var distance_to_player := Vector2(player.position.x - enemy.position.x, player.position.z - enemy.position.z).length()
+		var last_attack := str(state.get("last_attack", ""))
+		var attack := _choose_frost_warden_attack(distance_to_player, phase, next_attack, last_attack)
 		state["next_attack"] = next_attack + 1
+		state["last_attack"] = attack
+		state["combo_step"] = int(state.get("combo_step", 0)) + 1
 		var target := player.position
 		var origin := enemy.position
 		state["target"] = target
 		state["origin"] = origin
 		state["attack"] = attack
-		state["windup"] = (1.2 if phase == 0 else (0.95 if phase == 1 else 0.72)) if attack == "nova" else ((1.35 if phase == 0 else (1.05 if phase == 1 else 0.82)) if attack == "lance" else (1.1 if phase == 0 else (0.9 if phase == 1 else 0.68)))
-		state["cooldown"] = (5.1 if phase == 0 else (3.9 if phase == 1 else 2.75))
+		var distance_windup_bonus := 0.12 if distance_to_player < 3.2 else (0.08 if distance_to_player > 8.0 else 0.0)
+		state["windup"] = ((1.28 if phase == 0 else (1.08 if phase == 1 else 0.92)) if attack == "nova" else (((1.42 if phase == 0 else (1.22 if phase == 1 else 1.02))) if attack == "lance" else ((1.2 if phase == 0 else (1.02 if phase == 1 else 0.9)))) + distance_windup_bonus
+		state["cooldown"] = (4.8 if phase == 0 else (3.55 if phase == 1 else 2.65))
 		state["recovery"] = 0.0
 		var warning := MeshInstance3D.new()
 		warning.name = "FrostTelegraph_" + attack
@@ -1039,6 +1065,27 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 	else:
 		state["cooldown"] = cooldown
 	frost_warden_states[enemy] = state
+
+func _choose_frost_warden_attack(distance_to_player: float, phase: int, sequence_index: int, last_attack: String) -> String:
+	var preferred := "lance"
+	if distance_to_player < 3.2:
+		preferred = "nova"
+	elif distance_to_player <= 8.0:
+		var patterns := [
+			["nova", "lance", "shatter"],
+			["lance", "shatter", "nova"],
+			["shatter", "nova", "lance"]
+		]
+		var pattern: Array = patterns[clampi(phase, 0, 2)]
+		preferred = str(pattern[sequence_index % pattern.size()])
+	if preferred == last_attack:
+		if preferred == "nova":
+			preferred = "shatter" if distance_to_player > 4.0 else "lance"
+		elif preferred == "lance":
+			preferred = "nova" if distance_to_player < 5.5 else "shatter"
+		else:
+			preferred = "lance" if distance_to_player > 5.5 else "nova"
+	return preferred
 
 func _player_in_ice_lance(origin: Vector3, target: Vector3) -> bool:
 	var start := Vector2(origin.x, origin.z)
@@ -1255,6 +1302,12 @@ func _skill() -> void:
 
 func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	if not is_instance_valid(enemy): return
+	if enemy.name == "FrostWarden" and frost_warden_states.has(enemy):
+		var boss_state: Dictionary = frost_warden_states[enemy]
+		if float(boss_state.get("phase_shift", 0.0)) > 0.0:
+			if status_label != null:
+				status_label.text = "FROST WARDEN PHASE SHIFT  •  TEMPORARILY IMMUNE"
+			return
 	var remaining_hp: int = int(enemy_health.get(enemy, 75)) - damage
 	enemy_health[enemy] = remaining_hp
 	_spawn_damage_number(enemy, damage)
@@ -1431,7 +1484,9 @@ func _refresh_progression_ui() -> void:
 		lines.append("FROST WARDEN: every 3rd wave  •  650 HP")
 		lines.append("BOSS PHASES: 65% / 30% HP  •  FROST NOVA TELEGRAPH")
 		lines.append("DODGE: leave the cyan danger zone before impact")
-		lines.append("ARMOR reduces Frost Nova damage by up to 12")
+		lines.append("ARMOR reduces Frost Warden damage by up to 12")
+		lines.append("BOSS AI: range-aware combos  •  phase shift grants 1.05s guard")
+		lines.append("SHATTER RING: dodge through the inner safe zone or beyond the outer edge")
 		lines.append("BOSS REWARD: Frost Sigil + 300 coins + 350 XP")
 		lines.append("FIRST KILL: Glacial Crown + 500 coins + 600 XP")
 		lines.append("BOSS ATTACKS: Frost Nova / Ice Lance / Shatter Ring")
