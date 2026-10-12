@@ -37,6 +37,7 @@ var gear_sort_option: OptionButton
 var gear_list_container: VBoxContainer
 var gear_detail_label: Label
 var equip_selected_gear_button: Button
+var salvage_selected_gear_button: Button
 var selected_gear_id := 0
 var gear_sort_mode := 0
 var boss_first_kill_claimed := false
@@ -1169,6 +1170,12 @@ func _build_hud() -> void:
 	equip_selected_gear_button.text = "EQUIP SELECTED ITEM"
 	equip_selected_gear_button.pressed.connect(_equip_selected_loot)
 	inventory_stack.add_child(equip_selected_gear_button)
+	salvage_selected_gear_button = Button.new()
+	salvage_selected_gear_button.name = "SalvageSelectedGear"
+	salvage_selected_gear_button.custom_minimum_size = Vector2(0, 34)
+	salvage_selected_gear_button.text = "DISMANTLE SELECTED GEAR"
+	salvage_selected_gear_button.pressed.connect(_salvage_selected_loot)
+	inventory_stack.add_child(salvage_selected_gear_button)
 	var craft_weapon_button := Button.new()
 	craft_weapon_button.text = "CRAFT / EQUIP  •  ASHEN BLADE"
 	craft_weapon_button.pressed.connect(_craft_weapon)
@@ -2506,6 +2513,9 @@ func _refresh_gear_inventory_ui() -> void:
 		gear_detail_label.text = "No dropped equipment yet. Hunt Ash Wolves and Ruin Stalkers, or defeat the Frost Warden."
 		equip_selected_gear_button.disabled = true
 		equip_selected_gear_button.text = "EQUIP SELECTED ITEM"
+		if salvage_selected_gear_button != null:
+			salvage_selected_gear_button.disabled = true
+			salvage_selected_gear_button.text = "DISMANTLE SELECTED GEAR"
 		return
 	var selected_slot := str(selected.get("slot", "weapon"))
 	var equipped := _equipped_loot_gear(selected_slot)
@@ -2514,12 +2524,20 @@ func _refresh_gear_inventory_ui() -> void:
 	var delta_text := "New slot bonus"
 	if not equipped.is_empty():
 		current_text = "%s %s (%s)" % [str(equipped.get("rarity", "Common")).to_upper(), str(equipped.get("name", "Gear")), _gear_stat_summary(equipped)]
-		var delta := _gear_score(selected) - _gear_score(equipped)
-		delta_text = ("+" if delta > 0 else "") + str(delta) + " gear score"
-	gear_detail_label.text = "%s %s  •  %s\nSELECTED: %s\nEQUIPPED: %s\nCOMPARISON: %s" % [str(selected.get("rarity", "Common")).to_upper(), str(selected.get("slot", "weapon")).to_upper(), stat_name, _gear_stat_summary(selected), current_text, delta_text]
+		if selected_slot == "weapon":
+			var attack_delta := int(selected.get("attack", 0)) - int(equipped.get("attack", 0))
+			delta_text = "%s%d ATK • basic/skill damage %s%d" % ["+" if attack_delta > 0 else "", attack_delta, "+" if attack_delta > 0 else "", attack_delta]
+		else:
+			var hp_delta := int(selected.get("hp", 0)) - int(equipped.get("hp", 0))
+			var mitigation_delta := int(selected.get("mitigation", 0)) - int(equipped.get("mitigation", 0))
+			delta_text = "%s%d max HP • %s%d damage reduction" % ["+" if hp_delta > 0 else "", hp_delta, "+" if mitigation_delta > 0 else "", mitigation_delta]
+	gear_detail_label.text = "%s %s  •  %s\nSELECTED: %s\nEQUIPPED: %s\nACTUAL BONUS CHANGE: %s" % [str(selected.get("rarity", "Common")).to_upper(), str(selected.get("slot", "weapon")).to_upper(), stat_name, _gear_stat_summary(selected), current_text, delta_text]
 	var already_equipped := int(selected.get("id", 0)) == (equipped_loot_weapon_id if selected_slot == "weapon" else equipped_loot_armor_id)
 	equip_selected_gear_button.disabled = already_equipped
 	equip_selected_gear_button.text = "CURRENTLY EQUIPPED" if already_equipped else "EQUIP SELECTED  •  %s" % str(selected.get("name", "ITEM")).to_upper()
+	if salvage_selected_gear_button != null:
+		salvage_selected_gear_button.disabled = already_equipped
+		salvage_selected_gear_button.text = "EQUIPPED — CANNOT DISMANTLE" if already_equipped else "DISMANTLE FOR %d COINS + MATERIALS" % _gear_salvage_coins(selected)
 
 func _equip_selected_loot() -> void:
 	var item := _selected_loot_gear()
@@ -2536,6 +2554,37 @@ func _equip_selected_loot() -> void:
 	_save_progress()
 	if status_label != null:
 		status_label.text = "EQUIPPED %s  •  %s  •  %s" % [str(item.get("rarity", "Common")).to_upper(), str(item.get("name", "GEAR")), _gear_stat_summary(item)]
+
+
+func _gear_salvage_coins(item: Dictionary) -> int:
+	return 8 + _rarity_rank(str(item.get("rarity", "Common"))) * 7
+
+func _salvage_selected_loot() -> void:
+	var item := _selected_loot_gear()
+	if item.is_empty():
+		return
+	var slot := str(item.get("slot", "weapon"))
+	var item_id := int(item.get("id", 0))
+	var equipped_id := equipped_loot_weapon_id if slot == "weapon" else equipped_loot_armor_id
+	if item_id == equipped_id:
+		if status_label != null:
+			status_label.text = "UNEQUIP THIS ITEM BEFORE DISMANTLING IT"
+		return
+	var rarity := str(item.get("rarity", "Common"))
+	var reward_coins := _gear_salvage_coins(item)
+	coins += reward_coins
+	var material_name := "Ancient Shard" if slot == "weapon" else "Ruin Core"
+	var material_count := 1 + int(_rarity_rank(rarity) >= 4)
+	inventory[material_name] = int(inventory.get(material_name, 0)) + material_count
+	for i in range(loot_gear.size() - 1, -1, -1):
+		if int(loot_gear[i].get("id", 0)) == item_id:
+			loot_gear.remove_at(i)
+			break
+	selected_gear_id = 0
+	_refresh_progression_ui()
+	_save_progress()
+	if status_label != null:
+		status_label.text = "DISMANTLED %s  •  +%d COINS  •  +%d %s" % [str(item.get("name", "GEAR")), reward_coins, material_count, material_name.to_upper()]
 
 func _equipped_loot_gear(slot: String) -> Dictionary:
 	var wanted_id := equipped_loot_weapon_id if slot == "weapon" else equipped_loot_armor_id
@@ -2876,13 +2925,46 @@ func _load_progress() -> void:
 	weapon_level = clampi(int(save.get_value("equipment", "weapon_level", weapon_level)), 0, 5)
 	armor_level = clampi(int(save.get_value("equipment", "armor_level", armor_level)), 0, 5)
 	var saved_loot: Variant = save.get_value("equipment", "loot_gear", [])
+	var highest_loaded_id := 0
+	var used_ids: Dictionary = {}
 	if saved_loot is Array:
 		for saved_item in saved_loot:
-			if saved_item is Dictionary and str(saved_item.get("slot", "")) in ["weapon", "armor"]:
-				loot_gear.append(saved_item.duplicate(true))
+			if not saved_item is Dictionary:
+				continue
+			var slot := str(saved_item.get("slot", ""))
+			if slot not in ["weapon", "armor"]:
+				continue
+			var item_id := int(saved_item.get("id", 0))
+			if item_id <= 0 or used_ids.has(item_id):
+				continue
+			var rarity := str(saved_item.get("rarity", "Common"))
+			if rarity not in ["Common", "Uncommon", "Rare", "Epic", "Legendary"]:
+				rarity = "Common"
+			var normalized: Dictionary = {
+				"id": item_id,
+				"name": str(saved_item.get("name", "Recovered Gear")).substr(0, 64),
+				"slot": slot,
+				"rarity": rarity,
+				"source": str(saved_item.get("source", "Unknown")).substr(0, 64),
+				"attack": clampi(int(saved_item.get("attack", 0)), 0, 100),
+				"hp": clampi(int(saved_item.get("hp", 0)), 0, 500),
+				"mitigation": clampi(int(saved_item.get("mitigation", 0)), 0, 30)
+			}
+			if slot == "weapon":
+				normalized["hp"] = 0
+				normalized["mitigation"] = 0
+			else:
+				normalized["attack"] = 0
+			used_ids[item_id] = true
+			highest_loaded_id = maxi(highest_loaded_id, item_id)
+			loot_gear.append(normalized)
 	equipped_loot_weapon_id = int(save.get_value("equipment", "equipped_loot_weapon_id", 0))
 	equipped_loot_armor_id = int(save.get_value("equipment", "equipped_loot_armor_id", 0))
-	next_loot_gear_id = maxi(1, int(save.get_value("equipment", "next_loot_gear_id", 1)))
+	if _equipped_loot_gear("weapon").is_empty():
+		equipped_loot_weapon_id = 0
+	if _equipped_loot_gear("armor").is_empty():
+		equipped_loot_armor_id = 0
+	next_loot_gear_id = maxi(maxi(1, int(save.get_value("equipment", "next_loot_gear_id", 1))), highest_loaded_id + 1)
 	quest_stage = clampi(int(save.get_value("quest", "stage", quest_stage)), 0, 4)
 	quest_stage_progress = maxi(0, int(save.get_value("quest", "progress", quest_stage_progress)))
 	quest_completed = bool(save.get_value("quest", "completed", quest_completed))
