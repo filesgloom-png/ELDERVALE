@@ -1380,7 +1380,7 @@ func _allocate_attribute(attribute: String) -> void:
 			return
 		vitality_rank += 1
 		stat_points -= 1
-			_recalculate_derived_stats(true)
+		_recalculate_derived_stats(true)
 		status_label.text = "VITALITY INCREASED  •  MAX HP +8"
 	else:
 		return
