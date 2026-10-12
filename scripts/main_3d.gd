@@ -899,8 +899,11 @@ func _process(delta: float) -> void:
 	dodge_cooldown = maxf(0.0, dodge_cooldown - delta)
 	dodge_invulnerability_time = maxf(0.0, dodge_invulnerability_time - delta)
 	if dodge_status_label != null:
-		dodge_status_label.text = "DODGE READY  •  %.2fs EVADE" % dodge_invulnerability_time if dodge_cooldown <= 0.0 else "DODGE COOLDOWN  •  %.1fs" % dodge_cooldown
-		dodge_status_label.add_theme_color_override("font_color", Color("#9fe6ef") if dodge_cooldown <= 0.0 else Color("#d7c59f"))
+		if dodge_invulnerability_time > 0.0:
+			dodge_status_label.text = "PERFECT EVADE  •  %.2fs" % dodge_invulnerability_time
+		else:
+			dodge_status_label.text = "DODGE READY" if dodge_cooldown <= 0.0 else "DODGE COOLDOWN  •  %.1fs" % dodge_cooldown
+		dodge_status_label.add_theme_color_override("font_color", Color("#9fe6ef") if dodge_cooldown <= 0.0 or dodge_invulnerability_time > 0.0 else Color("#d7c59f"))
 	if wave_respawn_timer >= 0.0:
 		wave_respawn_timer -= delta
 		if wave_respawn_timer <= 0.0 and enemies.is_empty():
