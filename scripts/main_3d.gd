@@ -1285,7 +1285,9 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 		var next_attack := int(state.get("next_attack", 0))
 		var distance_to_player := Vector2(player.position.x - enemy.position.x, player.position.z - enemy.position.z).length()
 		var last_attack := str(state.get("last_attack", ""))
-		var attack := _choose_frost_warden_attack(distance_to_player, phase, next_attack, last_attack)
+		var combo_followup := str(state.get("combo_followup", ""))
+		var attack := combo_followup if phase == 2 and not combo_followup.is_empty() else _choose_frost_warden_attack(distance_to_player, phase, next_attack, last_attack)
+		state["combo_followup"] = ""
 		state["next_attack"] = next_attack + 1
 		state["last_attack"] = attack
 		state["combo_step"] = int(state.get("combo_step", 0)) + 1
@@ -1305,7 +1307,13 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 		else:
 			base_windup = 1.2 if phase == 0 else (1.02 if phase == 1 else 0.9)
 		state["windup"] = base_windup + distance_windup_bonus
-		state["cooldown"] = (4.8 if phase == 0 else (3.55 if phase == 1 else 2.65))
+		if phase == 2 and attack == "charge":
+			state["combo_followup"] = "nova"
+			state["cooldown"] = 1.42
+		elif phase == 2 and last_attack == "charge" and attack == "nova":
+			state["cooldown"] = 2.15
+		else:
+			state["cooldown"] = (4.8 if phase == 0 else (3.55 if phase == 1 else 2.65))
 		state["recovery"] = 0.0
 		var warning := MeshInstance3D.new()
 		warning.name = "FrostTelegraph_" + attack
