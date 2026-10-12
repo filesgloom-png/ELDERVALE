@@ -647,7 +647,7 @@ func _update_mobs(delta: float) -> void:
 				mob.erase("respawn_timer")
 			mobs[i] = mob
 			continue
-			var mob_pos: Vector2 = mob["pos"]
+		var mob_pos: Vector2 = mob["pos"]
 		var hit_react := maxf(float(mob.get("hit_react", 0.0)) - delta, 0.0)
 		if hit_react > 0.0:
 			mob["hit_react"] = hit_react
