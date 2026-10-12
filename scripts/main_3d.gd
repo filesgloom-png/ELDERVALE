@@ -82,6 +82,10 @@ var move_speed := MOVE_SPEED
 var mobile_hud_layer: CanvasLayer
 var start_menu_layer: CanvasLayer
 var has_saved_character := false
+var profile_panel: PanelContainer
+var profile_title_label: Label
+var profile_content_label: Label
+var profile_tab := "HERO"
 
 func _ready() -> void:
 	_load_progress()
@@ -1051,12 +1055,114 @@ func _build_hud() -> void:
 	close_inventory.pressed.connect(_toggle_inventory)
 	inventory_stack.add_child(close_inventory)
 	_refresh_progression_ui()
+	_build_profile_panel(layer)
+	var profile_tabs := HBoxContainer.new()
+	profile_tabs.name = "HeroMenuTabs"
+	profile_tabs.position = Vector2(22, 184)
+	profile_tabs.add_theme_constant_override("separation", 6)
+	layer.add_child(profile_tabs)
+	_add_profile_tab(profile_tabs, "HERO")
+	_add_profile_tab(profile_tabs, "STATS")
+	_add_profile_tab(profile_tabs, "SKILLS")
 	var help := Label.new()
 	help.position = Vector2(24, 650)
 	help.text = "MOVE  •  LEFT SIDE      ATTACK  •  SKILL  •  DODGE"
 	help.add_theme_font_size_override("font_size", 12)
 	help.add_theme_color_override("font_color", Color("#d7d6c0"))
 	layer.add_child(help)
+
+func _add_profile_tab(parent: HBoxContainer, tab_name: String) -> void:
+	var button := Button.new()
+	button.text = tab_name
+	button.custom_minimum_size = Vector2(82, 38)
+	button.add_theme_font_size_override("font_size", 12)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.035, 0.075, 0.08, 0.94)
+	normal.border_color = Color("#70cfc8")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(7)
+	button.add_theme_stylebox_override("normal", normal)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color("#276e70")
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.pressed.connect(_show_profile_tab.bind(tab_name))
+	parent.add_child(button)
+
+func _build_profile_panel(layer: CanvasLayer) -> void:
+	profile_panel = PanelContainer.new()
+	profile_panel.name = "HeroStatsSkillsPanel"
+	profile_panel.set_anchors_preset(Control.PRESET_CENTER)
+	profile_panel.offset_left = -250
+	profile_panel.offset_top = -245
+	profile_panel.offset_right = 250
+	profile_panel.offset_bottom = 245
+	profile_panel.visible = false
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.018, 0.035, 0.043, 0.97)
+	style.border_color = Color("#73d8d0")
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(14)
+	style.shadow_color = Color(0, 0, 0, 0.5)
+	style.shadow_size = 16
+	profile_panel.add_theme_stylebox_override("panel", style)
+	layer.add_child(profile_panel)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 10)
+	profile_panel.add_child(stack)
+	profile_title_label = Label.new()
+	profile_title_label.text = "HERO PROFILE"
+	profile_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	profile_title_label.add_theme_font_size_override("font_size", 23)
+	profile_title_label.add_theme_color_override("font_color", Color("#f0dfbd"))
+	stack.add_child(profile_title_label)
+	var divider := HSeparator.new()
+	stack.add_child(divider)
+	profile_content_label = Label.new()
+	profile_content_label.name = "ProfilePageContent"
+	profile_content_label.custom_minimum_size = Vector2(450, 330)
+	profile_content_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	profile_content_label.add_theme_font_size_override("font_size", 16)
+	profile_content_label.add_theme_color_override("font_color", Color("#d6e2d7"))
+	profile_content_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	stack.add_child(profile_content_label)
+	var close := Button.new()
+	close.text = "RETURN TO REALM"
+	close.custom_minimum_size = Vector2(0, 44)
+	close.pressed.connect(_close_profile_panel)
+	stack.add_child(close)
+	_show_profile_tab("HERO")
+
+func _show_profile_tab(tab_name: String) -> void:
+	profile_tab = tab_name
+	if profile_panel == null or profile_content_label == null:
+		return
+	profile_panel.visible = true
+	match tab_name:
+		"STATS":
+			profile_title_label.text = "CHARACTER ATTRIBUTES"
+			var attack_power := 34 + weapon_level * 9
+			var skill_power := 58 + weapon_level * 14
+			if character_class == "Arcanist":
+				skill_power = int(round(float(skill_power) * 1.35))
+			profile_content_label.text = "NAME     %s\nCLASS    %s\nLEVEL    %d\nEXPERIENCE    %d / %d\n\nVITALITY\nHP    %d / %d\nARMOR    %d upgrade rank\n\nCOMBAT RATINGS\nBasic strike    %d damage\nSignature skill    %d damage\nWeapon rank    %d / 5\nArmor rank    %d / 5\n\nWALLET\nCoins    %d" % [character_name, character_class, player_level, xp, xp_to_next_level, player_hp, player_max_hp, armor_level, attack_power, skill_power, weapon_level, armor_level, coins]
+		"SKILLS":
+			profile_title_label.text = "COMBAT SKILLS"
+			var class_skill := "Warden Cleave"
+			var class_passive := "Balanced melee training"
+			if character_class == "Arcanist":
+				class_skill = "Frostcaller Surge"
+				class_passive = "Signature skill damage +35%; ultimate damage +25%"
+			elif character_class == "Ranger":
+				class_skill = "Duskstrider Cut"
+				class_passive = "Basic attack cooldown reduced; movement speed +15%"
+			profile_content_label.text = "CLASS SIGNATURE\n%s\nCooldown: 4.0 seconds\n\nBASIC ATTACK\nSword Strike\nCooldown: 0.48 seconds (0.36 Ranger)\n\nEVASION\nDodge Roll\n2.8-second cooldown • 0.32-second invulnerability\n\nULTIMATE\nAncient Oath\nHigh-impact strike; class modifiers apply\n\nCLASS TRAIT\n%s\n\nBOSS MECHANICS\nRead telegraphs and evade Frost Nova, Ice Lance and Shatter Ring." % [class_skill, class_passive]
+		_:
+			profile_title_label.text = "HERO PROFILE"
+			profile_content_label.text = "%s\n%s  •  LEVEL %d\n\nYOUR JOURNEY\nShattered Reach — ancient ruins\nCurrent story: %s\n\nEQUIPMENT\nAshen Blade  •  rank %d\nRuin Armor  •  rank %d\n\nCOLLECTION\nCoins: %d\nRecorded discoveries: %d\n\nChoose STATS for attributes or SKILLS for combat abilities." % [character_name, character_class, player_level, _quest_description(), weapon_level, armor_level, coins, codex_discoveries.size()]
+
+func _close_profile_panel() -> void:
+	if profile_panel != null:
+		profile_panel.visible = false
 
 func _hud_bar_style(color: Color) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
