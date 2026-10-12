@@ -13,6 +13,9 @@ var touch_origin := Vector2.ZERO
 var touch_index := -1
 var attack_cooldown := 0.0
 var skill_cooldown := 0.0
+var dodge_cooldown := 0.0
+var dodge_invulnerability_time := 0.0
+var dodge_status_label: Label
 var player_hp := 148
 var player_max_hp := 148
 var xp := 178
@@ -769,6 +772,14 @@ func _build_hud() -> void:
 	target_label.add_theme_font_size_override("font_size", 13)
 	target_label.add_theme_color_override("font_color", Color("#d2d9bd"))
 	layer.add_child(target_label)
+	dodge_status_label = Label.new()
+	dodge_status_label.name = "DodgeTimingIndicator"
+	dodge_status_label.position = Vector2(22, 154)
+	dodge_status_label.size = Vector2(300, 22)
+	dodge_status_label.text = "DODGE READY  •  0.32s EVADE"
+	dodge_status_label.add_theme_font_size_override("font_size", 13)
+	dodge_status_label.add_theme_color_override("font_color", Color("#9fe6ef"))
+	layer.add_child(dodge_status_label)
 	_add_action_button(layer, "ATTACK", Vector2(-118, -112), Vector2(104, 104), Color("#8c4937"), _attack)
 	_add_action_button(layer, "SKILL", Vector2(-238, -92), Vector2(88, 88), Color("#3d6c83"), _skill)
 	_add_action_button(layer, "DODGE", Vector2(-205, -205), Vector2(76, 76), Color("#367780"), _dodge)
@@ -885,6 +896,11 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	world_time += delta
 	animation_time += delta
+	dodge_cooldown = maxf(0.0, dodge_cooldown - delta)
+	dodge_invulnerability_time = maxf(0.0, dodge_invulnerability_time - delta)
+	if dodge_status_label != null:
+		dodge_status_label.text = "DODGE READY  •  %.2fs EVADE" % dodge_invulnerability_time if dodge_cooldown <= 0.0 else "DODGE COOLDOWN  •  %.1fs" % dodge_cooldown
+		dodge_status_label.add_theme_color_override("font_color", Color("#9fe6ef") if dodge_cooldown <= 0.0 else Color("#d7c59f"))
 	if wave_respawn_timer >= 0.0:
 		wave_respawn_timer -= delta
 		if wave_respawn_timer <= 0.0 and enemies.is_empty():
@@ -1256,7 +1272,7 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 				hit = _player_in_ice_lance(origin, target)
 				damage = 35 if phase == 2 else (28 if phase == 1 else 22)
 			elif attack == "charge":
-				hit = Vector2(player.position.x - enemy.position.x, player.position.z - enemy.position.z).length() <= 2.45
+				hit = _player_in_ice_lance(origin, target, 1.12)
 				damage = 43 if phase == 2 else 34
 			else:
 				var ring_inner := 4.0 if phase == 2 else (3.4 if phase == 1 else 2.8)
@@ -1311,6 +1327,7 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 			state["combo_followup"] = "nova"
 			state["cooldown"] = 1.42
 		elif phase == 2 and last_attack == "charge" and attack == "nova":
+			state["combo_followup"] = "shatter"
 			state["cooldown"] = 2.15
 		else:
 			state["cooldown"] = (4.8 if phase == 0 else (3.55 if phase == 1 else 2.65))
@@ -1380,17 +1397,21 @@ func _choose_frost_warden_attack(distance_to_player: float, phase: int, sequence
 			preferred = "lance" if distance_to_player > 5.5 else "nova"
 	return preferred
 
-func _player_in_ice_lance(origin: Vector3, target: Vector3) -> bool:
+func _player_in_ice_lance(origin: Vector3, target: Vector3, hit_width: float = 1.15) -> bool:
 	var start := Vector2(origin.x, origin.z)
 	var finish := Vector2(target.x, target.z)
 	var point := Vector2(player.position.x, player.position.z)
 	var segment := finish - start
 	if segment.length_squared() < 0.01:
-		return point.distance_to(start) <= 1.15
+		return point.distance_to(start) <= hit_width
 	var t := clampf((point - start).dot(segment) / segment.length_squared(), 0.0, 1.0)
-	return point.distance_to(start + segment * t) <= 1.15
+	return point.distance_to(start + segment * t) <= hit_width
 
 func _take_frost_damage(amount: int, attack_name: String = "FROST ATTACK") -> void:
+	if dodge_invulnerability_time > 0.0:
+		if status_label != null:
+			status_label.text = "PERFECT EVADE  •  %s" % attack_name
+		return
 	var mitigation := mini(12, armor_level * 3)
 	var damage := maxi(8, amount - mitigation)
 	player_hp = maxi(0, player_hp - damage)
@@ -1690,6 +1711,12 @@ func _damage_enemy(enemy: Node3D, damage: int) -> void:
 	_refresh_progression_ui()
 
 func _dodge() -> void:
+	if dodge_cooldown > 0.0:
+		if status_label != null:
+			status_label.text = "DODGE RECHARGING  •  %.1fs" % dodge_cooldown
+		return
+	dodge_cooldown = 2.8
+	dodge_invulnerability_time = 0.32
 	var dodge_origin := player.position
 	var direction := Vector3(move_input.x, 0, move_input.y)
 	if direction.length_squared() < 0.01:
