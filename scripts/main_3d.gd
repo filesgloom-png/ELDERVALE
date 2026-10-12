@@ -86,6 +86,14 @@ var profile_panel: PanelContainer
 var profile_title_label: Label
 var profile_content_label: Label
 var profile_tab := "HERO"
+var stat_points := 0
+var skill_points := 0
+var strength_rank := 0
+var vitality_rank := 0
+var signature_skill_rank := 1
+var profile_power_button: Button
+var profile_vitality_button: Button
+var profile_skill_button: Button
 
 func _ready() -> void:
 	_load_progress()
@@ -1125,6 +1133,21 @@ func _build_profile_panel(layer: CanvasLayer) -> void:
 	profile_content_label.add_theme_color_override("font_color", Color("#d6e2d7"))
 	profile_content_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stack.add_child(profile_content_label)
+	profile_power_button = Button.new()
+	profile_power_button.name = "AllocatePowerPoint"
+	profile_power_button.custom_minimum_size = Vector2(0, 38)
+	profile_power_button.pressed.connect(_allocate_attribute.bind("power"))
+	stack.add_child(profile_power_button)
+	profile_vitality_button = Button.new()
+	profile_vitality_button.name = "AllocateVitalityPoint"
+	profile_vitality_button.custom_minimum_size = Vector2(0, 38)
+	profile_vitality_button.pressed.connect(_allocate_attribute.bind("vitality"))
+	stack.add_child(profile_vitality_button)
+	profile_skill_button = Button.new()
+	profile_skill_button.name = "UpgradeSignatureSkill"
+	profile_skill_button.custom_minimum_size = Vector2(0, 38)
+	profile_skill_button.pressed.connect(_upgrade_signature_skill)
+	stack.add_child(profile_skill_button)
 	var close := Button.new()
 	close.text = "RETURN TO REALM"
 	close.custom_minimum_size = Vector2(0, 44)
@@ -1137,6 +1160,9 @@ func _show_profile_tab(tab_name: String) -> void:
 	if profile_panel == null or profile_content_label == null:
 		return
 	profile_panel.visible = true
+	profile_power_button.visible = tab_name == "STATS"
+	profile_vitality_button.visible = tab_name == "STATS"
+	profile_skill_button.visible = tab_name == "SKILLS"
 	match tab_name:
 		"STATS":
 			profile_title_label.text = "CHARACTER ATTRIBUTES"
@@ -1144,7 +1170,9 @@ func _show_profile_tab(tab_name: String) -> void:
 			var skill_power := 58 + weapon_level * 14
 			if character_class == "Arcanist":
 				skill_power = int(round(float(skill_power) * 1.35))
-			profile_content_label.text = "NAME     %s\nCLASS    %s\nLEVEL    %d\nEXPERIENCE    %d / %d\n\nVITALITY\nHP    %d / %d\nARMOR    %d upgrade rank\n\nCOMBAT RATINGS\nBasic strike    %d damage\nSignature skill    %d damage\nWeapon rank    %d / 5\nArmor rank    %d / 5\n\nWALLET\nCoins    %d" % [character_name, character_class, player_level, xp, xp_to_next_level, player_hp, player_max_hp, armor_level, attack_power, skill_power, weapon_level, armor_level, coins]
+			profile_content_label.text = "NAME     %s\\nCLASS    %s\\nLEVEL    %d\\nEXPERIENCE    %d / %d\\n\\nVITALITY RANK    %d\\nMAX HP    %d / %d\\nARMOR    %d upgrade rank\\nPOWER RANK    %d\\nUNSPENT ATTRIBUTE POINTS    %d\\n\\nCOMBAT RATINGS\\nBasic strike    %d damage\\nSignature skill    %d damage\\nWeapon rank    %d / 5\\nArmor rank    %d / 5\\n\\nWALLET\\nCoins    %d" % [character_name, character_class, player_level, xp, xp_to_next_level, vitality_rank, player_hp, player_max_hp, armor_level, strength_rank, stat_points, attack_power, skill_power, weapon_level, armor_level, coins]
+			profile_power_button.text = "POWER +1  •  %d POINTS AVAILABLE" % stat_points
+			profile_vitality_button.text = "VITALITY +1  •  %d POINTS AVAILABLE" % stat_points
 		"SKILLS":
 			profile_title_label.text = "COMBAT SKILLS"
 			var class_skill := "Warden Cleave"
@@ -1155,10 +1183,51 @@ func _show_profile_tab(tab_name: String) -> void:
 			elif character_class == "Ranger":
 				class_skill = "Duskstrider Cut"
 				class_passive = "Basic attack cooldown reduced; movement speed +15%"
-			profile_content_label.text = "CLASS SIGNATURE\n%s\nCooldown: 4.0 seconds\n\nBASIC ATTACK\nSword Strike\nCooldown: 0.48 seconds (0.36 Ranger)\n\nEVASION\nDodge Roll\n2.8-second cooldown • 0.32-second invulnerability\n\nULTIMATE\nAncient Oath\nHigh-impact strike; class modifiers apply\n\nCLASS TRAIT\n%s\n\nBOSS MECHANICS\nRead telegraphs and evade Frost Nova, Ice Lance and Shatter Ring." % [class_skill, class_passive]
+			profile_content_label.text = "CLASS SIGNATURE\\n%s\\nRank %d / 5  •  Cooldown: 4.0 seconds\\nBase damage: %d\\n\\nBASIC ATTACK\\nSword Strike\\nCooldown: 0.48 seconds (0.36 Ranger)\\n\\nEVASION\\nDodge Roll\\n2.8-second cooldown • 0.32-second invulnerability\\n\\nULTIMATE\\nAncient Oath\\nHigh-impact strike; class modifiers apply\\n\\nCLASS TRAIT\\n%s\\n\\nSKILL POINTS AVAILABLE    %d\\nUpgrade signature skill to increase its damage by 12%% per rank." % [class_skill, signature_skill_rank, int(round(float(58 + weapon_level * 14) * (1.0 + float(signature_skill_rank - 1) * 0.12))), class_passive, skill_points]
+			profile_skill_button.text = "UPGRADE SIGNATURE  •  %d SKILL POINTS" % skill_points
 		_:
 			profile_title_label.text = "HERO PROFILE"
 			profile_content_label.text = "%s\n%s  •  LEVEL %d\n\nYOUR JOURNEY\nShattered Reach — ancient ruins\nCurrent story: %s\n\nEQUIPMENT\nAshen Blade  •  rank %d\nRuin Armor  •  rank %d\n\nCOLLECTION\nCoins: %d\nRecorded discoveries: %d\n\nChoose STATS for attributes or SKILLS for combat abilities." % [character_name, character_class, player_level, _quest_description(), weapon_level, armor_level, coins, codex_discoveries.size()]
+
+func _allocate_attribute(attribute: String) -> void:
+	if stat_points <= 0:
+		status_label.text = "NO ATTRIBUTE POINTS AVAILABLE  •  LEVEL UP TO EARN MORE"
+		return
+	if attribute == "power":
+		if strength_rank >= 50:
+			status_label.text = "POWER RANK ALREADY MAXED"
+			return
+		strength_rank += 1
+		stat_points -= 1
+		status_label.text = "POWER INCREASED  •  BASIC ATTACK +3 DAMAGE"
+	elif attribute == "vitality":
+		if vitality_rank >= 50:
+			status_label.text = "VITALITY RANK ALREADY MAXED"
+			return
+		vitality_rank += 1
+		stat_points -= 1
+		player_max_hp += 8
+		player_hp = mini(player_max_hp, player_hp + 8)
+		status_label.text = "VITALITY INCREASED  •  MAX HP +8"
+	else:
+		return
+	_refresh_progression_ui()
+	_show_profile_tab("STATS")
+	_save_progress()
+
+func _upgrade_signature_skill() -> void:
+	if skill_points <= 0:
+		status_label.text = "NO SKILL POINTS AVAILABLE  •  LEVEL UP TO EARN MORE"
+		return
+	if signature_skill_rank >= 5:
+		status_label.text = "SIGNATURE SKILL ALREADY AT MAXIMUM RANK"
+		return
+	skill_points -= 1
+	signature_skill_rank += 1
+	status_label.text = "SIGNATURE SKILL UPGRADED  •  RANK %d / 5" % signature_skill_rank
+	_refresh_progression_ui()
+	_show_profile_tab("SKILLS")
+	_save_progress()
 
 func _close_profile_panel() -> void:
 	if profile_panel != null:
@@ -1946,7 +2015,7 @@ func _attack() -> void:
 	attack_cooldown = 0.36 if character_class == "Ranger" else 0.48
 	var target := _nearest_enemy()
 	if target != null:
-		var damage := 34 + weapon_level * 9
+		var damage := 34 + weapon_level * 9 + strength_rank * 3
 		if character_class == "Ranger":
 			damage = int(round(float(damage) * 0.9))
 		_damage_enemy(target, damage)
@@ -1962,7 +2031,7 @@ func _skill() -> void:
 	skill_cooldown = 4.0
 	var target := _nearest_enemy()
 	if target != null:
-		var damage := 58 + weapon_level * 14
+		var damage := int(round(float(58 + weapon_level * 14 + strength_rank * 3) * (1.0 + float(signature_skill_rank - 1) * 0.12)))
 		if character_class == "Arcanist":
 			damage = int(round(float(damage) * 1.35))
 		_damage_enemy(target, damage)
@@ -2073,7 +2142,7 @@ func _ultimate() -> void:
 	_spawn_combat_effect("oath")
 	var target := _nearest_enemy()
 	if target != null:
-		var damage := 90 + weapon_level * 22
+		var damage := 90 + weapon_level * 22 + strength_rank * 3
 		if character_class == "Arcanist":
 			damage = int(round(float(damage) * 1.25))
 		_damage_enemy(target, damage)
@@ -2134,6 +2203,8 @@ func _gain_xp(amount: int) -> void:
 	while xp >= xp_to_next_level:
 		xp -= xp_to_next_level
 		player_level += 1
+		stat_points += 2
+		skill_points += 1
 		xp_to_next_level += 130 + player_level * 18
 		leveled_up = true
 	if leveled_up:
@@ -2276,6 +2347,11 @@ func _save_progress() -> void:
 	save.set_value("player", "xp", xp)
 	save.set_value("player", "xp_to_next_level", xp_to_next_level)
 	save.set_value("player", "coins", coins)
+	save.set_value("player", "stat_points", stat_points)
+	save.set_value("player", "skill_points", skill_points)
+	save.set_value("attributes", "strength_rank", strength_rank)
+	save.set_value("attributes", "vitality_rank", vitality_rank)
+	save.set_value("skills", "signature_rank", signature_skill_rank)
 	save.set_value("inventory", "items", inventory)
 	save.set_value("equipment", "weapon_level", weapon_level)
 	save.set_value("equipment", "armor_level", armor_level)
@@ -2300,6 +2376,11 @@ func _load_progress() -> void:
 	xp = int(save.get_value("player", "xp", xp))
 	xp_to_next_level = int(save.get_value("player", "xp_to_next_level", xp_to_next_level))
 	coins = int(save.get_value("player", "coins", coins))
+	stat_points = clampi(int(save.get_value("player", "stat_points", stat_points)), 0, 100)
+	skill_points = clampi(int(save.get_value("player", "skill_points", skill_points)), 0, 100)
+	strength_rank = clampi(int(save.get_value("attributes", "strength_rank", strength_rank)), 0, 50)
+	vitality_rank = clampi(int(save.get_value("attributes", "vitality_rank", vitality_rank)), 0, 50)
+	signature_skill_rank = clampi(int(save.get_value("skills", "signature_rank", signature_skill_rank)), 1, 5)
 	var saved_inventory: Variant = save.get_value("inventory", "items", inventory)
 	if saved_inventory is Dictionary:
 		for item_name in inventory.keys():
@@ -2313,7 +2394,7 @@ func _load_progress() -> void:
 	boss_first_kill_claimed = bool(save.get_value("boss", "first_kill_claimed", boss_first_kill_claimed))
 	if quest_completed and quest_stage == 3:
 		quest_stage = 4
-	player_max_hp = 148 + armor_level * 18
+	player_max_hp = 148 + armor_level * 18 + vitality_rank * 8
 	player_hp = mini(player_hp, player_max_hp)
 	var saved_discoveries: Variant = save.get_value("codex", "discoveries", [])
 	if saved_discoveries is Array:
