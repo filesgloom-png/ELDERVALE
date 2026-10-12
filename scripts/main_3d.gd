@@ -713,15 +713,17 @@ func _recalculate_derived_stats(heal_increased_capacity: bool = false) -> void:
 func _refresh_equipment_visuals() -> void:
 	if player == null:
 		return
+	var equipped_weapon := _equipped_loot_gear("weapon")
+	var equipped_armor := _equipped_loot_gear("armor")
+	var loot_weapon_color := _rarity_color(str(equipped_weapon.get("rarity", "Common"))) if not equipped_weapon.is_empty() else Color("#d8e0d5")
+	var blade_color := loot_weapon_color if not equipped_weapon.is_empty() else (Color("#d8e0d5") if weapon_level < 2 else (Color("#83e8e0") if weapon_level < 4 else Color("#ffd28b")))
+	var blade_mat := _mat(blade_color, 0.22, 0.9)
+	if weapon_level >= 3 or not equipped_weapon.is_empty():
+		blade_mat.emission_enabled = true
+		blade_mat.emission = _rarity_color(str(equipped_weapon.get("rarity", "Common"))) if not equipped_weapon.is_empty() else (Color("#5bded0") if weapon_level < 5 else Color("#ffb84f"))
+		blade_mat.emission_energy_multiplier = 0.8 + float(_rarity_rank(str(equipped_weapon.get("rarity", "Common")))) * 0.32 if not equipped_weapon.is_empty() else 1.1 + float(weapon_level - 2) * 0.35
 	var blade := player.get_node_or_null("Longsword") as MeshInstance3D
 	if blade != null:
-		var equipped_weapon := _equipped_loot_gear("weapon")
-		var loot_color := _rarity_color(str(equipped_weapon.get("rarity", ""))) if not equipped_weapon.is_empty() else Color("#d8e0d5")
-		var blade_mat := _mat(loot_color if not equipped_weapon.is_empty() else (Color("#d8e0d5") if weapon_level < 2 else (Color("#83e8e0") if weapon_level < 4 else Color("#ffd28b"))), 0.22, 0.9)
-		if weapon_level >= 3:
-			blade_mat.emission_enabled = true
-			blade_mat.emission = Color("#5bded0") if weapon_level < 5 else Color("#ffb84f")
-			blade_mat.emission_energy_multiplier = 1.1 + float(weapon_level - 2) * 0.35
 		blade.material_override = blade_mat
 	var weapon_rune_mat := _mat(Color("#65f4e7") if weapon_level < 5 else Color("#ffca72"), 0.22, 0.35)
 	weapon_rune_mat.emission_enabled = true
@@ -738,8 +740,7 @@ func _refresh_equipment_visuals() -> void:
 		weapon_rune.visible = weapon_level >= 2
 	var breastplate := player.get_node_or_null("LayeredBreastplate") as MeshInstance3D
 	if breastplate != null:
-		var equipped_armor := _equipped_loot_gear("armor")
-		var armor_color := _rarity_color(str(equipped_armor.get("rarity", ""))) if not equipped_armor.is_empty() else (Color("#283c42") if armor_level < 2 else (Color("#477b78") if armor_level < 4 else Color("#a17a43")))
+		var armor_color := _rarity_color(str(equipped_armor.get("rarity", "Common"))) if not equipped_armor.is_empty() else (Color("#283c42") if armor_level < 2 else (Color("#477b78") if armor_level < 4 else Color("#a17a43")))
 		breastplate.material_override = _mat(armor_color, 0.38, 0.48)
 	var cape := player.get_node_or_null("WardenCape") as MeshInstance3D
 	if cape != null:
@@ -769,20 +770,11 @@ func _refresh_equipment_visuals() -> void:
 		armor_sigils.scale = Vector3(1.0, 0.8, 0.35)
 		armor_sigils.rotation.x = deg_to_rad(90.0)
 		armor_sigils.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	armor_sigils.visible = armor_level >= 3
+	armor_sigils.visible = armor_level >= 3 or not equipped_armor.is_empty()
 	var armor_sigil_mat := _mat(Color("#75f1e7") if armor_level < 5 else Color("#ffd28b"), 0.25, 0.32)
-	armor_sigil_mat.emission_enabled = armor_level >= 3
-	armor_sigil_mat.emission = Color("#48dcd4") if armor_level < 5 else Color("#ffad48")
-	armor_sigil_mat.emission_energy_multiplier = 0.9 + float(armor_level) * 0.2
-	if not equipped_weapon.is_empty():
-		blade_mat.emission_enabled = true
-		blade_mat.emission = _rarity_color(str(equipped_weapon.get("rarity", "Common")))
-		blade_mat.emission_energy_multiplier = 0.8 + float(_rarity_rank(str(equipped_weapon.get("rarity", "Common")))) * 0.32
-		blade.material_override = blade_mat
-	if not equipped_armor.is_empty():
-		armor_sigil_mat.emission_enabled = true
-		armor_sigil_mat.emission = _rarity_color(str(equipped_armor.get("rarity", "Common")))
-		armor_sigil_mat.emission_energy_multiplier = 0.6 + float(_rarity_rank(str(equipped_armor.get("rarity", "Common")))) * 0.2
+	armor_sigil_mat.emission_enabled = armor_level >= 3 or not equipped_armor.is_empty()
+	armor_sigil_mat.emission = _rarity_color(str(equipped_armor.get("rarity", "Common"))) if not equipped_armor.is_empty() else (Color("#48dcd4") if armor_level < 5 else Color("#ffad48"))
+	armor_sigil_mat.emission_energy_multiplier = 0.6 + float(_rarity_rank(str(equipped_armor.get("rarity", "Common")))) * 0.2 if not equipped_armor.is_empty() else 0.9 + float(armor_level) * 0.2
 	armor_sigils.material_override = armor_sigil_mat
 
 func _build_enemies() -> void:
