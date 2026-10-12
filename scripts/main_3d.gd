@@ -54,6 +54,7 @@ var enemy_base_colors: Dictionary = {}
 var enemy_health_ui: Dictionary = {}
 var enemy_knockback: Dictionary = {}
 var enemy_recovery_animations: Dictionary = {}
+var enemy_combat_states: Dictionary = {}
 var frost_warden_states: Dictionary = {}
 var health_bar_fade_effects: Array[Dictionary] = []
 var damage_number_effects: Array[Dictionary] = []
@@ -1017,15 +1018,22 @@ func _process(delta: float) -> void:
 		if enemy.name == "FrostWarden":
 			_update_frost_warden_combat(enemy, delta)
 		var d := enemy.position.distance_to(player.position)
-		if d < 11.0 and d > 2.6:
-			var toward := (player.position - enemy.position).normalized()
-			enemy.position += Vector3(toward.x, 0, toward.z) * (0.55 if i < 3 else 0.35) * delta
-			enemy.rotation.y = atan2(-toward.x, -toward.z)
+		if enemy.name != "FrostWarden":
+			_update_standard_enemy_combat(enemy, delta, d)
 	if hp_bar != null:
 		hp_bar.value = player_hp
 	_refresh_boss_hud()
 	if status_label != null:
 		var combat_status := ("ATTACK READY" if attack_cooldown <= 0 else "ATTACK  %.1fs" % attack_cooldown) + "     •     " + ("SKILL READY" if skill_cooldown <= 0 else "SKILL  %.1fs" % skill_cooldown)
+		for threat in enemies:
+			if not is_instance_valid(threat) or threat.name == "FrostWarden" or not enemy_combat_states.has(threat):
+				continue
+			var threat_state: Dictionary = enemy_combat_states[threat]
+			var threat_windup := float(threat_state.get("windup", 0.0))
+			if threat_windup > 0.0 and threat.position.distance_to(player.position) < 12.0:
+				var threat_name := "ASH WOLF POUNCE" if threat.name == "AshWolf" else "RUIN STALKER STRIKE"
+				combat_status = "%s INCOMING  •  DODGE NOW  •  %.1fs" % [threat_name, threat_windup]
+				break
 		for boss in enemies:
 			if is_instance_valid(boss) and boss.name == "FrostWarden" and frost_warden_states.has(boss):
 				var boss_state: Dictionary = frost_warden_states[boss]
@@ -1037,6 +1045,111 @@ func _process(delta: float) -> void:
 					combat_status += "     •     FROST WARDEN ACTIVE"
 				break
 		status_label.text = combat_status
+
+func _update_standard_enemy_combat(enemy: Node3D, delta: float, distance_to_player: float) -> void:
+	if not enemy_combat_states.has(enemy):
+		enemy_combat_states[enemy] = {
+			"cooldown": 0.9 if enemy.name == "AshWolf" else 1.5,
+			"windup": 0.0,
+			"recovery": 0.0,
+			"marker": null,
+			"target": Vector3.ZERO
+		}
+	var state: Dictionary = enemy_combat_states[enemy]
+	var body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
+	var head := enemy.get_node_or_null("EnemyHead") as MeshInstance3D
+	var is_wolf := enemy.name == "AshWolf"
+	var attack_range := 2.7 if is_wolf else 3.2
+	var windup_duration := 0.62 if is_wolf else 0.82
+	var cooldown := maxf(0.0, float(state.get("cooldown", 0.0)) - delta)
+	var windup := float(state.get("windup", 0.0))
+	var recovery := maxf(0.0, float(state.get("recovery", 0.0)) - delta)
+	state["recovery"] = recovery
+	if windup > 0.0:
+		windup = maxf(0.0, windup - delta)
+		state["windup"] = windup
+		var anticipation := 1.0 - windup / windup_duration
+		if body != null:
+			body.scale = (Vector3(0.72, 0.58, 0.55) if is_wolf else Vector3(0.72, 0.58, 0.55)) * Vector3(1.0 + anticipation * 0.18, 1.0 - anticipation * 0.12, 1.0 + anticipation * 0.12)
+			body.rotation.x = (-0.20 if is_wolf else 0.08) * anticipation
+		if head != null:
+			head.rotation.x = (-0.16 if is_wolf else 0.12) * anticipation
+		var marker := state.get("marker") as Node3D
+		if is_instance_valid(marker):
+			var pulse := 0.88 + 0.16 * sin(animation_time * 18.0)
+			marker.scale = Vector3(pulse, 1.0, pulse)
+			marker.rotation.y += delta * 0.8
+		if windup <= 0.0:
+			if is_instance_valid(marker):
+				marker.queue_free()
+			state["marker"] = null
+			var target: Vector3 = state.get("target", player.position)
+			var strike_direction := target - enemy.position
+			strike_direction.y = 0.0
+			if strike_direction.length_squared() > 0.001:
+				var lunge_distance := 3.2 if is_wolf else 2.25
+				enemy.position += strike_direction.normalized() * minf(lunge_distance, maxf(0.0, distance_to_player - 1.0))
+			var strike_range := 2.35 if is_wolf else 2.7
+			if Vector2(enemy.position.x - player.position.x, enemy.position.z - player.position.z).length() <= strike_range:
+				_take_frost_damage(17 if is_wolf else 21, "ASH WOLF POUNCE" if is_wolf else "RUIN STALKER STRIKE")
+				_spawn_combat_effect("hit", player.position + Vector3(0.0, 0.08, 0.0))
+			else:
+				if status_label != null:
+					status_label.text = "ENEMY STRIKE EVADED  •  GOOD DODGE"
+			state["recovery"] = 0.36
+			state["cooldown"] = 2.25 if is_wolf else 2.8
+			enemy.rotation.z = 0.24 if is_wolf else -0.18
+	elif recovery > 0.0:
+		if body != null:
+			body.scale = Vector3(0.72, 0.58, 0.55) * (1.0 + 0.05 * sin((1.0 - recovery / 0.36) * PI))
+		if head != null:
+			head.rotation.x = -0.06 * sin((1.0 - recovery / 0.36) * PI)
+	else:
+		if body != null:
+			body.scale = Vector3(0.72, 0.58, 0.55)
+			body.rotation.x = 0.0
+		if head != null:
+			head.rotation.x = 0.0
+		if distance_to_player < 8.8 and distance_to_player > attack_range and cooldown <= 0.0:
+			var to_player := player.position - enemy.position
+			to_player.y = 0.0
+			if to_player.length_squared() > 0.001:
+				enemy.rotation.y = lerp_angle(enemy.rotation.y, atan2(to_player.x, to_player.z), minf(1.0, delta * 3.8))
+				var approach_speed := 2.5 if is_wolf else 1.25
+				enemy.position += to_player.normalized() * approach_speed * delta
+		elif distance_to_player <= attack_range and cooldown <= 0.0:
+			state["windup"] = windup_duration
+			state["target"] = player.position
+			state["cooldown"] = windup_duration + 0.25
+			if body != null:
+				body.scale = Vector3(0.82, 0.52, 0.64)
+			var warning := MeshInstance3D.new()
+			var ring := TorusMesh.new()
+			ring.inner_radius = 0.78 if is_wolf else 0.88
+			ring.outer_radius = 0.92 if is_wolf else 1.02
+			ring.rings = 6
+			ring.ring_segments = 24
+			warning.mesh = ring
+			var warning_material := StandardMaterial3D.new()
+			warning_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			warning_material.albedo_color = Color("#ff9b63") if is_wolf else Color("#c9a8ff")
+			warning_material.emission_enabled = true
+			warning_material.emission = warning_material.albedo_color
+			warning_material.emission_energy_multiplier = 1.4
+			warning.material_override = warning_material
+			warning.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			warning.position = player.position + Vector3(0.0, 0.08, 0.0)
+			warning.rotation.x = PI * 0.5
+			warning.name = "EnemyAttackTelegraph"
+			add_child(warning)
+			state["marker"] = warning
+		elif distance_to_player >= 8.8:
+			var to_player := player.position - enemy.position
+			to_player.y = 0.0
+			if to_player.length_squared() > 0.001:
+				enemy.rotation.y = lerp_angle(enemy.rotation.y, atan2(to_player.x, to_player.z), minf(1.0, delta * 2.0))
+	state["cooldown"] = cooldown if float(state.get("windup", 0.0)) <= 0.0 and float(state.get("cooldown", 0.0)) <= 0.0 else float(state.get("cooldown", 0.0))
+	enemy_combat_states[enemy] = state
 
 func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 	if not frost_warden_states.has(enemy):
