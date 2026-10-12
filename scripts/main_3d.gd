@@ -90,13 +90,20 @@ func _build_environment() -> void:
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("#8ba69a")
-	env.ambient_light_energy = 0.62
+	env.ambient_light_color = Color("#8ba8b2")
+	env.ambient_light_energy = 0.72
 	env.fog_enabled = true
-	env.fog_light_color = Color("#74877c")
-	env.fog_density = 0.006
-	env.fog_sky_affect = 0.18
+	env.fog_light_color = Color("#526c75")
+	env.fog_density = 0.008
+	env.fog_sky_affect = 0.24
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.glow_enabled = true
+	env.glow_intensity = 0.72
+	env.glow_strength = 0.82
+	env.glow_bloom = 0.08
+	env.adjustment_enabled = true
+	env.adjustment_contrast = 1.12
+	env.adjustment_saturation = 1.08
 	world_env.environment = env
 	add_child(world_env)
 	var sun := DirectionalLight3D.new()
@@ -139,11 +146,24 @@ func _build_world() -> void:
 	ground_mesh.size = Vector2(110, 110)
 	var ground := _mesh_node(self, ground_mesh, grass, Vector3.ZERO, "ForestGround")
 	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var path_mat := _mat(Color("#76694f"))
+	var path_mat := _mat(Color("#76694f"), 0.98)
 	var path_mesh := BoxMesh.new()
 	path_mesh.size = Vector3(8.0, 0.12, 100.0)
 	var path := _mesh_node(self, path_mesh, path_mat, Vector3(0, 0.025, 0), "AncientRoad")
 	path.rotation.y = -0.22
+	var path_edge_mat := _mat(Color("#9b8b68"), 0.82, 0.08)
+	var path_inlay_mat := _mat(Color("#427c79"), 0.48, 0.16)
+	path_inlay_mat.emission_enabled = true
+	path_inlay_mat.emission = Color("#3eaaa4")
+	path_inlay_mat.emission_energy_multiplier = 0.35
+	magical_materials.append(path_inlay_mat)
+	for side in [-1.0, 1.0]:
+		var edge := _box(self, Vector3(0.22, 0.1, 100.0), path_edge_mat, Vector3(side * 3.92, 0.09, 0.0), "AncientRoadBorder")
+		edge.rotation.y = -0.22
+		edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var inlay := _box(self, Vector3(0.055, 0.035, 96.0), path_inlay_mat, Vector3(side * 3.72, 0.105, 0.0), "RunicRoadInlay")
+		inlay.rotation.y = -0.22
+		inlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var moss := _mat(Color("#52694a"))
 	var bark := _mat(Color("#4a3528"))
 	var leaf_a := _mat(Color("#304d3b"))
@@ -256,11 +276,40 @@ func _build_magic_accents() -> void:
 	rune_mat.emission = rune_color
 	rune_mat.emission_energy_multiplier = 0.8
 	magical_materials.append(rune_mat)
-	for i in range(8):
-		var angle := TAU * float(i) / 8.0
-		var rune := _box(self, Vector3(0.48, 0.035, 0.09), rune_mat, Vector3(cos(angle) * 7.2, 0.17, -14.0 + sin(angle) * 2.0), "AncientRune")
+	for i in range(12):
+		var angle := TAU * float(i) / 12.0
+		var rune := _box(self, Vector3(0.52 if i % 3 == 0 else 0.32, 0.04, 0.11), rune_mat, Vector3(cos(angle) * 7.2, 0.17, -14.0 + sin(angle) * 2.0), "AncientRune")
 		rune.rotation.y = -angle * 0.5
 		rune.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var arena_outer_mat := _mat(Color("#4e9da4", 0.58), 0.42, 0.22)
+	arena_outer_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	arena_outer_mat.emission_enabled = true
+	arena_outer_mat.emission = Color("#4fc9d5")
+	arena_outer_mat.emission_energy_multiplier = 0.55
+	var arena_outer_mesh := TorusMesh.new()
+	arena_outer_mesh.inner_radius = 6.7
+	arena_outer_mesh.outer_radius = 6.82
+	arena_outer_mesh.rings = 6
+	arena_outer_mesh.ring_segments = 40
+	var arena_outer := _mesh_node(self, arena_outer_mesh, arena_outer_mat, Vector3(0.0, 0.13, -25.0), "FrostArenaOuterRune")
+	arena_outer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var arena_inner_mesh := TorusMesh.new()
+	arena_inner_mesh.inner_radius = 5.9
+	arena_inner_mesh.outer_radius = 5.97
+	arena_inner_mesh.rings = 5
+	arena_inner_mesh.ring_segments = 36
+	var arena_inner := _mesh_node(self, arena_inner_mesh, rune_mat, Vector3(0.0, 0.15, -25.0), "FrostArenaInnerRune")
+	arena_inner.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for i in range(8):
+		var angle := TAU * float(i) / 8.0
+		var shard_mat := _mat(Color("#6b9e9f"), 0.28, 0.35)
+		shard_mat.emission_enabled = true
+		shard_mat.emission = Color("#4cc7d6")
+		shard_mat.emission_energy_multiplier = 0.42
+		var shard := _mesh_node(self, PrismMesh.new(), shard_mat, Vector3(cos(angle) * 7.0, 0.55, -25.0 + sin(angle) * 7.0), "FrostArenaShard")
+		shard.scale = Vector3(0.22, 0.62 + float(i % 3) * 0.16, 0.22)
+		shard.rotation = Vector3(0.12, angle, 0.18 * sin(angle))
+		shard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 func _build_ruins() -> void:
 	var stone := _mat(Color("#6d7068"), 0.85)
@@ -437,6 +486,30 @@ func _build_enemies() -> void:
 			core_mat.emission_energy_multiplier = 2.2
 			var core := _mesh_node(enemy, PrismMesh.new(), core_mat, Vector3(0, 1.12, -0.68), "FrostCore")
 			core.scale = Vector3(0.32, 0.42, 0.22)
+			var ring_mat := _mat(Color("#8af5ff"), 0.24, 0.5)
+			ring_mat.emission_enabled = true
+			ring_mat.emission = Color("#54e7f7")
+			ring_mat.emission_energy_multiplier = 1.15
+			var orbit_mesh := TorusMesh.new()
+			orbit_mesh.inner_radius = 0.46
+			orbit_mesh.outer_radius = 0.52
+			orbit_mesh.rings = 6
+			orbit_mesh.ring_segments = 24
+			var orbit := _mesh_node(enemy, orbit_mesh, ring_mat, Vector3(0.0, 1.12, -0.68), "FrostCoreOrbit")
+			orbit.rotation_degrees = Vector3(62.0, 0.0, 18.0)
+			orbit.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			for side in [-1.0, 1.0]:
+				var pauldron_mat := _mat(Color("#567f88"), 0.28, 0.42)
+				pauldron_mat.emission_enabled = true
+				pauldron_mat.emission = Color("#3c9eae")
+				pauldron_mat.emission_energy_multiplier = 0.35
+				var pauldron := _mesh_node(enemy, PrismMesh.new(), pauldron_mat, Vector3(side * 0.78, 1.0, 0.02), "FrostPauldron")
+				pauldron.scale = Vector3(0.42, 0.48, 0.4)
+				pauldron.rotation.z = -side * 0.22
+				var back_spike := _mesh_node(enemy, PrismMesh.new(), ring_mat, Vector3(side * 0.48, 1.62, 0.38), "BackIceSpine")
+				back_spike.scale = Vector3(0.2, 0.66, 0.2)
+				back_spike.rotation.z = -side * 0.3
+				back_spike.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		enemies.append(enemy)
 		enemy_health[enemy] = 650 if i == 4 else (75 if i < 3 else 110)
 		enemy_hit_timers[enemy] = 0.0
@@ -942,6 +1015,10 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 	var windup := float(state.get("windup", 0.0))
 	var boss_body := enemy.get_node_or_null("EnemyBody") as MeshInstance3D
 	var boss_core := enemy.get_node_or_null("FrostCore") as MeshInstance3D
+	var boss_orbit := enemy.get_node_or_null("FrostCoreOrbit") as MeshInstance3D
+	if boss_orbit != null:
+		boss_orbit.rotation.y += delta * (2.2 if phase == 2 else 1.45)
+		boss_orbit.rotation.x = 1.08 + sin(animation_time * 1.8) * 0.12
 	if windup > 0.0:
 		var attack_pose := str(state.get("attack", "nova"))
 		var pose_wave := sin(animation_time * (17.0 if phase == 2 else 13.0))
@@ -1023,7 +1100,14 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 		state["origin"] = origin
 		state["attack"] = attack
 		var distance_windup_bonus := 0.12 if distance_to_player < 3.2 else (0.08 if distance_to_player > 8.0 else 0.0)
-		state["windup"] = ((1.28 if phase == 0 else (1.08 if phase == 1 else 0.92)) if attack == "nova" else (((1.42 if phase == 0 else (1.22 if phase == 1 else 1.02))) if attack == "lance" else ((1.2 if phase == 0 else (1.02 if phase == 1 else 0.9)))) + distance_windup_bonus
+		var base_windup: float
+		if attack == "nova":
+			base_windup = 1.28 if phase == 0 else (1.08 if phase == 1 else 0.92)
+		elif attack == "lance":
+			base_windup = 1.42 if phase == 0 else (1.22 if phase == 1 else 1.02)
+		else:
+			base_windup = 1.2 if phase == 0 else (1.02 if phase == 1 else 0.9)
+		state["windup"] = base_windup + distance_windup_bonus
 		state["cooldown"] = (4.8 if phase == 0 else (3.55 if phase == 1 else 2.65))
 		state["recovery"] = 0.0
 		var warning := MeshInstance3D.new()
