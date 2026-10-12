@@ -131,6 +131,11 @@ var player_xp := 0
 var player_coins := 0
 var kills := 0
 var attack_cooldown := 0.0
+var attack_animation_time := 0.0
+var attack_animation_duration := 0.34
+var attack_animation_direction: Vector2 = Vector2.RIGHT
+var player_recoil := 0.0
+var finisher_flash := 0.0
 var skill_cooldown := 0.0
 var ultimate_charge := 0.0
 var mob_attack_cooldown := 0.0
@@ -207,6 +212,9 @@ func _process(delta: float) -> void:
 	if echo_surge_time <= 0.0 and echo_shards >= 3:
 		_activate_echo_surge()
 	player_hit_flash = maxf(player_hit_flash - delta, 0.0)
+	attack_animation_time = maxf(attack_animation_time - delta, 0.0)
+	player_recoil = maxf(player_recoil - delta, 0.0)
+	finisher_flash = maxf(finisher_flash - delta, 0.0)
 	dodge_time = maxf(dodge_time - delta, 0.0)
 	dodge_cooldown = maxf(dodge_cooldown - delta, 0.0)
 	critical_flash = maxf(critical_flash - delta, 0.0)
@@ -639,7 +647,12 @@ func _update_mobs(delta: float) -> void:
 				mob.erase("respawn_timer")
 			mobs[i] = mob
 			continue
-		var mob_pos: Vector2 = mob["pos"]
+			var mob_pos: Vector2 = mob["pos"]
+		var hit_react := maxf(float(mob.get("hit_react", 0.0)) - delta, 0.0)
+		if hit_react > 0.0:
+			mob["hit_react"] = hit_react
+		else:
+			mob.erase("hit_react")
 		var hit_flash := maxf(float(mob.get("hit_flash", 0.0)) - delta, 0.0)
 		if hit_flash > 0.0:
 			mob["hit_flash"] = hit_flash
@@ -731,6 +744,9 @@ func _apply_incoming_damage(raw_damage: int, label: String) -> void:
 	var damage := maxi(1, int(round(float(maxi(1, raw_damage - armor_tier * 2 - armor_enchant * 2 - armor_bonus)) * (1.0 - reduction))))
 	player_hp -= damage
 	player_hit_flash = 0.24
+	player_recoil = 0.20
+	attack_animation_time = 0.0
+	combat_effects.append({"kind": "hit", "pos": player_position, "life": 0.24, "duration": 0.24})
 	var prefix := label + " -" if not label.is_empty() else "-"
 	_add_floating_message("%s%d" % [prefix, damage], player_position + Vector2(0, -45), Color("#ff8d69") if not label.is_empty() else Color("#f28f82"))
 	if player_hp <= 0:
@@ -755,6 +771,11 @@ func _try_attack() -> void:
 	if target_index == -1:
 		return
 	var target: Dictionary = mobs[target_index]
+	attack_animation_duration = 0.34 if combo_count < 2 else (0.40 if combo_count < 4 else 0.48)
+	attack_animation_time = attack_animation_duration
+	attack_animation_direction = (Vector2(target["pos"]) - player_position).normalized()
+	if attack_animation_direction.length_squared() < 0.001:
+		attack_animation_direction = Vector2.RIGHT
 	combo_count += 1
 	combo_timer = 1.65
 	if combo_count == 3:
@@ -792,8 +813,10 @@ func _try_attack() -> void:
 	else:
 		_add_floating_message("-%d" % damage, Vector2(target["pos"]) + Vector2(0, -36), Color("#f2b0a0"))
 	target["hp"] = int(target["hp"]) - damage
-	target["hit_flash"] = 0.18
-	combat_effects.append({"kind": "hit", "pos": Vector2(target["pos"]), "life": 0.18, "duration": 0.18})
+	target["hit_flash"] = 0.20
+	target["hit_react"] = 0.24 if not bool(target.get("boss", false)) else 0.16
+	target["pos"] = Vector2(target["pos"]) + slash_direction * (10.0 if not bool(target.get("boss", false)) else 4.0)
+	combat_effects.append({"kind": "hit", "pos": Vector2(target["pos"]), "life": 0.22, "duration": 0.22})
 	if int(target["hp"]) <= 0:
 		_defeat_mob(target)
 	_save_progress()
@@ -942,6 +965,8 @@ func _defeat_mob(mob: Dictionary) -> void:
 	if int(mob["xp"]) >= 28:
 		_spawn_loot_drop(mob["pos"] + Vector2(15, -8), "relic", 4 if is_boss else 1)
 	if is_boss:
+		finisher_flash = 0.72
+		combat_effects.append({"kind": "execution", "pos": Vector2(mob["pos"]), "life": 0.72, "duration": 0.72})
 		_spawn_loot_drop(mob["pos"] + Vector2(-26, -18), "guardian_core", 1)
 		_spawn_loot_drop(mob["pos"] + Vector2(26, -18), "ancient_cache", 1)
 		_add_floating_message("MEMORY GUARDIAN DEFEATED!" if is_memory_boss else "GUARDIAN DEFEATED!", mob["pos"] + Vector2(0, -74), Color("#83e8e0") if is_memory_boss else Color("#ffd28b"))
@@ -2103,6 +2128,16 @@ func _draw_combat_effects() -> void:
 			for trail_index in range(3):
 				var trail_offset := -direction * float(trail_index + 1) * 12.0
 				draw_line(Vector2(effect["pos"]) + trail_offset, Vector2(effect["pos"]) + trail_offset - direction * 10.0, dodge_color, 5.0 - float(trail_index))
+		elif String(effect["kind"]) == "execution":
+			var execution_color := Color("#baf7ff")
+			execution_color.a = (1.0 - progress) * 0.95
+			var execution_center: Vector2 = effect["pos"]
+			draw_circle(execution_center, 22.0 + progress * 48.0, Color(0.55, 0.88, 1.0, (1.0 - progress) * 0.16))
+			draw_arc(execution_center, 30.0 + progress * 88.0, -PI * 0.5 + progress * 0.7, TAU * 0.8 + progress * 0.7, 56, execution_color, 5.0 - progress * 2.0, true)
+			for ray_index in range(12):
+				var ray_angle := TAU * float(ray_index) / 12.0 + progress * 0.45
+				var ray_direction := Vector2(cos(ray_angle), sin(ray_angle))
+				draw_line(execution_center + ray_direction * (18.0 + progress * 10.0), execution_center + ray_direction * (40.0 + progress * 72.0), execution_color, 3.0)
 		elif String(effect["kind"]) == "hit":
 			var hit_color := Color("#fff0c2")
 			hit_color.a = (1.0 - progress) * 0.95
@@ -2128,19 +2163,42 @@ func _draw_floating_messages() -> void:
 		draw_string(ThemeDB.fallback_font, message_position, String(message["text"]), HORIZONTAL_ALIGNMENT_CENTER, 220, 14, message_color)
 
 func _draw_player() -> void:
-	draw_circle(player_position + Vector2(2, 15), 18.0, Color(0.02, 0.03, 0.025, 0.28))
+	var dodge_progress := clampf(dodge_time / 0.42, 0.0, 1.0)
+	var dodge_offset := dodge_direction * (1.0 - dodge_progress) * 28.0 if dodge_time > 0.0 else Vector2.ZERO
+	var recoil_offset := -attack_animation_direction * (player_recoil / 0.20) * 7.0 if player_recoil > 0.0 else Vector2.ZERO
+	var swing_progress := 1.0 - clampf(attack_animation_time / maxf(attack_animation_duration, 0.001), 0.0, 1.0)
+	var swinging := attack_animation_time > 0.0
+	var lunge := sin(swing_progress * PI) * 8.0 if swinging else 0.0
+	var draw_position := player_position + dodge_offset + recoil_offset + (attack_animation_direction * lunge if swinging else Vector2.ZERO)
+	draw_circle(draw_position + Vector2(2, 15), 18.0, Color(0.02, 0.03, 0.025, 0.28))
 	var body_color := Color("#fff0d4") if player_hit_flash > 0.0 else Color("#283b36")
 	var head_color := Color("#fff5e6") if player_hit_flash > 0.0 else Color("#c6ad8b")
-	draw_circle(player_position + Vector2(0, 2), 14.0, body_color)
-	draw_circle(player_position + Vector2(0, -7), 9.0, head_color)
-	draw_arc(player_position + Vector2(0, -7), 10.0, PI, TAU, 16, Color("#5b4335"), 4.0)
-	var weapon_direction := move_vector.normalized() if move_vector.length_squared() > 0.01 else Vector2(1, 0)
-	var weapon_start := player_position + weapon_direction * 9.0
-	var weapon_end := player_position + weapon_direction * 27.0
-	draw_line(weapon_start, weapon_end, Color("#b8c7c3"), 4.0)
-	draw_line(weapon_start - Vector2(3, 3), weapon_start + Vector2(3, 3), Color("#8b6848"), 3.0
-	)
-	draw_circle(player_position + Vector2(-3, -10), 2.0, Color("#26332d"))
+	var crouch := -3.0 if dodge_time > 0.0 else (sin(swing_progress * PI) * 2.0 if swinging else 0.0)
+	draw_circle(draw_position + Vector2(0, 2.0 + crouch), 14.0, body_color)
+	draw_circle(draw_position + Vector2(0, -7.0 + crouch), 9.0, head_color)
+	draw_arc(draw_position + Vector2(0, -7.0 + crouch), 10.0, PI, TAU, 16, Color("#5b4335"), 4.0)
+	var weapon_direction := attack_animation_direction if swinging else (move_vector.normalized() if move_vector.length_squared() > 0.01 else Vector2.RIGHT)
+	var weapon_angle := weapon_direction.angle()
+	if swinging:
+		var windup := clampf(swing_progress / 0.30, 0.0, 1.0)
+		var follow_through := clampf((swing_progress - 0.30) / 0.70, 0.0, 1.0)
+		weapon_angle += (1.0 - windup) * -1.05 + follow_through * 1.85
+		var arc_color := Color("#9feef0")
+		arc_color.a = 0.85 * (1.0 - swing_progress * 0.45)
+		draw_arc(draw_position + weapon_direction * 13.0, 31.0 + sin(swing_progress * PI) * 7.0, weapon_angle - 0.78, weapon_angle + 0.78, 24, arc_color, 4.0, true)
+	var weapon_vector := Vector2(cos(weapon_angle), sin(weapon_angle))
+	var weapon_start := draw_position + weapon_vector * 9.0
+	var weapon_end := draw_position + weapon_vector * (30.0 if swinging else 27.0)
+	if swinging:
+		var trail_color := Color("#c3fbff")
+		trail_color.a = 0.45 * (1.0 - swing_progress)
+		draw_line(weapon_start - weapon_vector.rotated(-0.34) * 7.0, weapon_end - weapon_vector.rotated(-0.34) * 10.0, trail_color, 5.0)
+	draw_line(weapon_start, weapon_end, Color("#e0f7f2") if swinging else Color("#b8c7c3"), 4.5 if swinging else 4.0)
+	draw_line(weapon_start - Vector2(3, 3), weapon_start + Vector2(3, 3), Color("#8b6848"), 3.0)
+	draw_circle(draw_position + Vector2(-3, -10 + crouch), 2.0, Color("#26332d"))
+	if finisher_flash > 0.0:
+		var finish_alpha := clampf(finisher_flash / 0.72, 0.0, 1.0)
+		draw_arc(draw_position, 34.0 + (1.0 - finish_alpha) * 60.0, 0.0, TAU, 40, Color(0.62, 0.94, 1.0, finish_alpha * 0.65), 3.0, true)
 
 func _draw_hud() -> void:
 	for mob in mobs:
