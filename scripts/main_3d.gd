@@ -1039,7 +1039,7 @@ func _process(delta: float) -> void:
 				var boss_state: Dictionary = frost_warden_states[boss]
 				var windup_left := float(boss_state.get("windup", 0.0))
 				if windup_left > 0.0:
-					var attack_name := str(boss_state.get("attack", "nova")).to_upper().replace("NOVA", "NOVA").replace("LANCE", "LANCE").replace("SHATTER", "SHATTER RING")
+					var attack_name := str(boss_state.get("attack", "nova")).to_upper().replace("NOVA", "FROST NOVA").replace("LANCE", "ICE LANCE").replace("CHARGE", "FROST CHARGE").replace("SHATTER", "SHATTER RING")
 					combat_status = "%s INCOMING  •  DODGE NOW  •  %.1fs" % [attack_name, windup_left]
 				elif float(boss_state.get("cooldown", 0.0)) > 0.0:
 					combat_status += "     •     FROST WARDEN ACTIVE"
@@ -1212,12 +1212,14 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 				pose_scale = Vector3(1.10, 0.92, 1.08)
 			elif attack_pose == "lance":
 				pose_scale = Vector3(1.24, 0.98, 0.88)
+			elif attack_pose == "charge":
+				pose_scale = Vector3(1.30, 0.88, 0.82)
 			else:
 				pose_scale = Vector3(1.08, 1.18, 0.98)
 			boss_body.scale = pose_scale * (1.0 + 0.025 * pose_wave)
 		if boss_core != null:
 			boss_core.rotation.y += delta * (3.2 if phase == 2 else 2.1)
-			boss_core.rotation.x = (0.32 if attack_pose == "lance" else (-0.24 if attack_pose == "shatter" else 0.0)) + sin(animation_time * 8.0) * 0.04
+			boss_core.rotation.x = (0.32 if attack_pose == "lance" else (-0.38 if attack_pose == "charge" else (-0.24 if attack_pose == "shatter" else 0.0))) + sin(animation_time * 8.0) * 0.04
 			boss_core.scale = (Vector3(0.48, 0.58, 0.32) if phase == 2 else (Vector3(0.38, 0.48, 0.26) if phase == 1 else Vector3(0.32, 0.42, 0.22))) * (1.0 + 0.10 * sin(animation_time * 16.0))
 		var live_marker := state.get("marker") as Node3D
 		if is_instance_valid(live_marker):
@@ -1235,8 +1237,15 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 			var attack := str(state.get("attack", "nova"))
 			var target: Vector3 = state.get("target", Vector3.ZERO)
 			var origin: Vector3 = state.get("origin", enemy.position)
-			var impact_kind := "frost_nova_burst" if attack == "nova" else ("frost_lance_burst" if attack == "lance" else "frost_shatter_burst")
-			_spawn_combat_effect(impact_kind, (target if attack == "nova" else origin) + Vector3(0.0, 0.04, 0.0))
+			if attack == "charge":
+				var charge_direction := target - origin
+				charge_direction.y = 0.0
+				var charge_distance := Vector2(target.x - origin.x, target.z - origin.z).length()
+				if charge_direction.length_squared() > 0.001:
+					enemy.position = origin + charge_direction.normalized() * minf(7.5, maxf(0.0, charge_distance - 1.15))
+			var impact_kind := "frost_nova_burst" if attack == "nova" else ("frost_lance_burst" if attack == "lance" else ("frost_charge_burst" if attack == "charge" else "frost_shatter_burst"))
+			var impact_position: Vector3 = target if attack == "nova" else (enemy.position if attack == "charge" else origin)
+			_spawn_combat_effect(impact_kind, impact_position + Vector3(0.0, 0.04, 0.0))
 			var hit := false
 			var damage := 0
 			if attack == "nova":
@@ -1246,6 +1255,9 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 			elif attack == "lance":
 				hit = _player_in_ice_lance(origin, target)
 				damage = 35 if phase == 2 else (28 if phase == 1 else 22)
+			elif attack == "charge":
+				hit = Vector2(player.position.x - enemy.position.x, player.position.z - enemy.position.z).length() <= 2.45
+				damage = 43 if phase == 2 else 34
 			else:
 				var ring_inner := 4.0 if phase == 2 else (3.4 if phase == 1 else 2.8)
 				var ring_outer := ring_inner + 0.55
@@ -1253,7 +1265,7 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 				hit = player_radius >= ring_inner and player_radius <= ring_outer
 				damage = 36 if phase == 2 else (29 if phase == 1 else 23)
 			if hit:
-				_take_frost_damage(damage, "FROST NOVA" if attack == "nova" else ("ICE LANCE" if attack == "lance" else "SHATTER RING"))
+				_take_frost_damage(damage, "FROST NOVA" if attack == "nova" else ("ICE LANCE" if attack == "lance" else ("FROST CHARGE" if attack == "charge" else "SHATTER RING")))
 				_spawn_combat_effect("hit", player.position + Vector3(0.0, 0.08, 0.0))
 			elif status_label != null:
 				status_label.text = "FROST ATTACK EVADED  •  GOOD DODGE"
@@ -1288,6 +1300,8 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 			base_windup = 1.28 if phase == 0 else (1.08 if phase == 1 else 0.92)
 		elif attack == "lance":
 			base_windup = 1.42 if phase == 0 else (1.22 if phase == 1 else 1.02)
+		elif attack == "charge":
+			base_windup = 0.98 if phase == 1 else 0.82
 		else:
 			base_windup = 1.2 if phase == 0 else (1.02 if phase == 1 else 0.9)
 		state["windup"] = base_windup + distance_windup_bonus
@@ -1295,7 +1309,7 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 		state["recovery"] = 0.0
 		var warning := MeshInstance3D.new()
 		warning.name = "FrostTelegraph_" + attack
-		var warning_tint := Color("#51e8ff") if attack == "nova" else (Color("#ffb65c") if attack == "lance" else Color("#b78cff"))
+		var warning_tint := Color("#51e8ff") if attack == "nova" else (Color("#ff694f") if attack == "charge" else (Color("#ffb65c") if attack == "lance" else Color("#b78cff")))
 		var warning_material := _mat(Color(warning_tint.r, warning_tint.g, warning_tint.b, 0.42), 0.35, 0.2)
 		warning_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		warning_material.emission_enabled = true
@@ -1303,10 +1317,10 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 		warning_material.emission_energy_multiplier = 1.15
 		warning.material_override = warning_material
 		warning.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		if attack == "lance":
+		if attack == "lance" or attack == "charge":
 			var line := BoxMesh.new()
 			var distance := maxf(2.0, Vector2(target.x - origin.x, target.z - origin.z).length())
-			line.size = Vector3(1.65, 0.055, distance)
+			line.size = Vector3(2.25 if attack == "charge" else 1.65, 0.06, distance)
 			warning.mesh = line
 			warning.position = Vector3((origin.x + target.x) * 0.5, 0.075, (origin.z + target.z) * 0.5)
 			warning.rotation.y = atan2(target.x - origin.x, target.z - origin.z)
@@ -1328,25 +1342,29 @@ func _update_frost_warden_combat(enemy: Node3D, delta: float) -> void:
 		add_child(warning)
 		state["marker"] = warning
 		if status_label != null:
-			status_label.text = "FROST NOVA  •  DODGE THE CYAN ZONE" if attack == "nova" else ("ICE LANCE  •  LEAVE THE LINE" if attack == "lance" else "SHATTER RING  •  ESCAPE THE BOSS")
+			status_label.text = "FROST NOVA  •  DODGE THE CYAN ZONE" if attack == "nova" else ("FROST CHARGE  •  CLEAR THE RED LINE" if attack == "charge" else ("ICE LANCE  •  LEAVE THE LINE" if attack == "lance" else "SHATTER RING  •  ESCAPE THE BOSS"))
 	else:
 		state["cooldown"] = cooldown
 	frost_warden_states[enemy] = state
 
 func _choose_frost_warden_attack(distance_to_player: float, phase: int, sequence_index: int, last_attack: String) -> String:
 	var preferred := "lance"
-	if distance_to_player < 3.2:
+	if phase >= 1 and distance_to_player >= 3.8 and sequence_index % 4 == 3:
+		preferred = "charge"
+	elif distance_to_player < 3.2:
 		preferred = "nova"
 	elif distance_to_player <= 8.0:
 		var patterns := [
 			["nova", "lance", "shatter"],
-			["lance", "shatter", "nova"],
-			["shatter", "nova", "lance"]
+			["lance", "charge", "nova", "shatter"],
+			["shatter", "charge", "nova", "lance"]
 		]
 		var pattern: Array = patterns[clampi(phase, 0, 2)]
 		preferred = str(pattern[sequence_index % pattern.size()])
 	if preferred == last_attack:
-		if preferred == "nova":
+		if preferred == "charge":
+			preferred = "lance" if distance_to_player > 5.5 else "nova"
+		elif preferred == "nova":
 			preferred = "shatter" if distance_to_player > 4.0 else "lance"
 		elif preferred == "lance":
 			preferred = "nova" if distance_to_player < 5.5 else "shatter"
