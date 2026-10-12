@@ -27,6 +27,12 @@ var stats_label: Label
 var inventory_label: Label
 var inventory_panel: PanelContainer
 var inventory: Dictionary = {"Ashen Pelt": 0, "Ancient Shard": 0, "Echo Fragment": 0, "Ruin Core": 0, "Warden Emblem": 0, "Frost Sigil": 0, "Glacial Crown": 0}
+var loot_gear: Array[Dictionary] = []
+var equipped_loot_weapon_id := 0
+var equipped_loot_armor_id := 0
+var next_loot_gear_id := 1
+var loot_weapon_button: Button
+var loot_armor_button: Button
 var boss_first_kill_claimed := false
 var codex_discoveries: Array[String] = []
 var weapon_level := 0
@@ -694,7 +700,8 @@ func _base_class_hp() -> int:
 
 func _recalculate_derived_stats(heal_increased_capacity: bool = false) -> void:
 	var previous_max_hp := player_max_hp
-	player_max_hp = _base_class_hp() + armor_level * 18 + vitality_rank * 8
+	var equipped_armor := _equipped_loot_gear("armor")
+	player_max_hp = _base_class_hp() + armor_level * 18 + vitality_rank * 8 + int(equipped_armor.get("hp", 0))
 	if heal_increased_capacity and player_max_hp > previous_max_hp:
 		player_hp = mini(player_max_hp, player_hp + player_max_hp - previous_max_hp)
 	else:
@@ -708,7 +715,9 @@ func _refresh_equipment_visuals() -> void:
 		return
 	var blade := player.get_node_or_null("Longsword") as MeshInstance3D
 	if blade != null:
-		var blade_mat := _mat(Color("#d8e0d5") if weapon_level < 2 else (Color("#83e8e0") if weapon_level < 4 else Color("#ffd28b")), 0.22, 0.9)
+		var equipped_weapon := _equipped_loot_gear("weapon")
+		var loot_color := _rarity_color(str(equipped_weapon.get("rarity", ""))) if not equipped_weapon.is_empty() else Color("#d8e0d5")
+		var blade_mat := _mat(loot_color if not equipped_weapon.is_empty() else (Color("#d8e0d5") if weapon_level < 2 else (Color("#83e8e0") if weapon_level < 4 else Color("#ffd28b"))), 0.22, 0.9)
 		if weapon_level >= 3:
 			blade_mat.emission_enabled = true
 			blade_mat.emission = Color("#5bded0") if weapon_level < 5 else Color("#ffb84f")
@@ -729,7 +738,9 @@ func _refresh_equipment_visuals() -> void:
 		weapon_rune.visible = weapon_level >= 2
 	var breastplate := player.get_node_or_null("LayeredBreastplate") as MeshInstance3D
 	if breastplate != null:
-		breastplate.material_override = _mat(Color("#283c42") if armor_level < 2 else (Color("#477b78") if armor_level < 4 else Color("#a17a43")), 0.38, 0.48)
+		var equipped_armor := _equipped_loot_gear("armor")
+		var armor_color := _rarity_color(str(equipped_armor.get("rarity", ""))) if not equipped_armor.is_empty() else (Color("#283c42") if armor_level < 2 else (Color("#477b78") if armor_level < 4 else Color("#a17a43")))
+		breastplate.material_override = _mat(armor_color, 0.38, 0.48)
 	var cape := player.get_node_or_null("WardenCape") as MeshInstance3D
 	if cape != null:
 		cape.material_override = _mat(Color("#263b43") if armor_level < 3 else (Color("#275c57") if armor_level < 5 else Color("#6d4328")), 0.7, 0.18)
@@ -763,6 +774,15 @@ func _refresh_equipment_visuals() -> void:
 	armor_sigil_mat.emission_enabled = armor_level >= 3
 	armor_sigil_mat.emission = Color("#48dcd4") if armor_level < 5 else Color("#ffad48")
 	armor_sigil_mat.emission_energy_multiplier = 0.9 + float(armor_level) * 0.2
+	if not equipped_weapon.is_empty():
+		blade_mat.emission_enabled = true
+		blade_mat.emission = _rarity_color(str(equipped_weapon.get("rarity", "Common")))
+		blade_mat.emission_energy_multiplier = 0.8 + float(_rarity_rank(str(equipped_weapon.get("rarity", "Common")))) * 0.32
+		blade.material_override = blade_mat
+	if not equipped_armor.is_empty():
+		armor_sigil_mat.emission_enabled = true
+		armor_sigil_mat.emission = _rarity_color(str(equipped_armor.get("rarity", "Common")))
+		armor_sigil_mat.emission_energy_multiplier = 0.6 + float(_rarity_rank(str(equipped_armor.get("rarity", "Common")))) * 0.2
 	armor_sigils.material_override = armor_sigil_mat
 
 func _build_enemies() -> void:
@@ -1117,6 +1137,16 @@ func _build_hud() -> void:
 	craft_armor_button.text = "CRAFT / EQUIP  •  RUIN ARMOR"
 	craft_armor_button.pressed.connect(_craft_armor)
 	inventory_stack.add_child(craft_armor_button)
+	loot_weapon_button = Button.new()
+	loot_weapon_button.name = "EquipBestLootWeapon"
+	loot_weapon_button.custom_minimum_size = Vector2(0, 34)
+	loot_weapon_button.pressed.connect(_equip_best_loot.bind("weapon"))
+	inventory_stack.add_child(loot_weapon_button)
+	loot_armor_button = Button.new()
+	loot_armor_button.name = "EquipBestLootArmor"
+	loot_armor_button.custom_minimum_size = Vector2(0, 34)
+	loot_armor_button.pressed.connect(_equip_best_loot.bind("armor"))
+	inventory_stack.add_child(loot_armor_button)
 	var close_inventory := Button.new()
 	close_inventory.text = "CLOSE"
 	close_inventory.pressed.connect(_toggle_inventory)
@@ -1230,7 +1260,7 @@ func _layout_mobile_ui() -> void:
 		inventory_panel.custom_minimum_size = Vector2(inventory_width, inventory_height)
 		var inventory_contents := inventory_panel.get_node_or_null("VBoxContainer/InventoryContents") as Label
 		if inventory_contents != null:
-			inventory_contents.custom_minimum_size = Vector2(inventory_width - 30.0, maxf(110.0, inventory_height * 0.48))
+			inventory_contents.custom_minimum_size = Vector2(inventory_width - 30.0, maxf(105.0, inventory_height * 0.34))
 			inventory_contents.add_theme_font_size_override("font_size", int(15.0 * ui_scale))
 	if profile_panel != null:
 		var profile_width := minf(460.0, viewport_size.x - 28.0)
@@ -2184,19 +2214,22 @@ func _nearest_enemy() -> Node3D:
 	return best
 
 func _basic_attack_damage() -> int:
-	var damage := 34 + weapon_level * 9 + strength_rank * 3
+	var equipped_weapon := _equipped_loot_gear("weapon")
+	var damage := 34 + weapon_level * 9 + strength_rank * 3 + int(equipped_weapon.get("attack", 0))
 	if character_class == "Ranger":
 		damage = int(round(float(damage) * 0.9))
 	return damage
 
 func _signature_skill_damage() -> int:
-	var damage := int(round(float(58 + weapon_level * 14 + strength_rank * 3) * (1.0 + float(signature_skill_rank - 1) * 0.12)))
+	var equipped_weapon := _equipped_loot_gear("weapon")
+	var damage := int(round(float(58 + weapon_level * 14 + strength_rank * 3 + int(equipped_weapon.get("attack", 0))) * (1.0 + float(signature_skill_rank - 1) * 0.12)))
 	if character_class == "Arcanist":
 		damage = int(round(float(damage) * 1.35))
 	return damage
 
 func _armor_mitigation() -> int:
-	return mini(12, armor_level * 3)
+	var equipped_armor := _equipped_loot_gear("armor")
+	return mini(18, armor_level * 3 + int(equipped_armor.get("mitigation", 0)))
 
 func _equipment_tier_name(rank: int, is_weapon: bool) -> String:
 	if rank >= 5:
@@ -2346,10 +2379,120 @@ func _ultimate() -> void:
 	attack_flash = 0.4
 	attack_anim_time = ATTACK_ANIM_DURATION
 
+
+func _rarity_rank(rarity: String) -> int:
+	match rarity:
+		"Uncommon": return 2
+		"Rare": return 3
+		"Epic": return 4
+		"Legendary": return 5
+		_: return 1
+
+func _rarity_color(rarity: String) -> Color:
+	match rarity:
+		"Uncommon": return Color("#70dca0")
+		"Rare": return Color("#69a8ff")
+		"Epic": return Color("#c18cff")
+		"Legendary": return Color("#ffbf5e")
+		_: return Color("#d8e0d5")
+
+func _gear_stat_summary(item: Dictionary) -> String:
+	if str(item.get("slot", "")) == "weapon":
+		return "+%d ATK" % int(item.get("attack", 0))
+	return "+%d HP / -%d DMG" % [int(item.get("hp", 0)), int(item.get("mitigation", 0))]
+
+func _equipped_loot_gear(slot: String) -> Dictionary:
+	var wanted_id := equipped_loot_weapon_id if slot == "weapon" else equipped_loot_armor_id
+	if wanted_id <= 0:
+		return {}
+	for item in loot_gear:
+		if int(item.get("id", 0)) == wanted_id and str(item.get("slot", "")) == slot:
+			return item
+	return {}
+
+func _gear_score(item: Dictionary) -> int:
+	if str(item.get("slot", "")) == "weapon":
+		return int(item.get("attack", 0)) * 10 + _rarity_rank(str(item.get("rarity", "Common")))
+	return int(item.get("hp", 0)) + int(item.get("mitigation", 0)) * 12 + _rarity_rank(str(item.get("rarity", "Common")))
+
+func _best_loot_item(slot: String) -> Dictionary:
+	var best: Dictionary = {}
+	for item in loot_gear:
+		if str(item.get("slot", "")) != slot:
+			continue
+		if best.is_empty() or _gear_score(item) > _gear_score(best):
+			best = item
+	return best
+
+func _create_loot_gear(slot: String, source: String, forced_rarity: String = "") -> Dictionary:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var rarity := forced_rarity
+	if rarity.is_empty():
+		var roll := rng.randf()
+		if roll < 0.01: rarity = "Legendary"
+		elif roll < 0.05: rarity = "Epic"
+		elif roll < 0.18: rarity = "Rare"
+		elif roll < 0.45: rarity = "Uncommon"
+		else: rarity = "Common"
+	var rank := _rarity_rank(rarity)
+	var weapon_names := ["Fangcleaver", "Ruinstone Edge", "Echo-Forged Saber", "Warden's Verdict", "Duskfall"]
+	var armor_names := ["Ashbound Vest", "Stalkerhide Mantle", "Echo-Woven Cuirass", "Warden's Aegis", "Crown of Shattered Ice"]
+	var name_index := rng.randi_range(0, weapon_names.size() - 1)
+	var item_name := str(weapon_names[name_index]) if slot == "weapon" else str(armor_names[name_index])
+	var item := {
+		"id": next_loot_gear_id,
+		"name": item_name,
+		"slot": slot,
+		"rarity": rarity,
+		"source": source,
+		"attack": rng.randi_range(2, 4) + (rank - 1) * 2 if slot == "weapon" else 0,
+		"hp": rng.randi_range(4, 10) + (rank - 1) * 6 if slot == "armor" else 0,
+		"mitigation": 1 + int(floor(float(rank - 1) / 2.0)) if slot == "armor" else 0
+	}
+	next_loot_gear_id += 1
+	loot_gear.append(item)
+	return item
+
+func _roll_equipment_drop(enemy: Node3D, rng: RandomNumberGenerator) -> Dictionary:
+	if enemy.name == "FrostWarden":
+		var forced_rarity := "Epic"
+		if not boss_first_kill_claimed:
+			forced_rarity = "Legendary"
+		return _create_loot_gear("weapon" if rng.randf() < 0.5 else "armor", "Frost Warden", forced_rarity)
+	if enemy.name == "AshWolf" and rng.randf() <= 0.08:
+		return _create_loot_gear("armor" if rng.randf() < 0.6 else "weapon", "Ash Wolf")
+	if enemy.name == "RuinStalker" and rng.randf() <= 0.18:
+		return _create_loot_gear("weapon" if rng.randf() < 0.55 else "armor", "Ruin Stalker")
+	return {}
+
+func _equip_best_loot(slot: String) -> void:
+	var item := _best_loot_item(slot)
+	if item.is_empty():
+		if status_label != null:
+			status_label.text = "NO %s GEAR FOUND YET" % slot.to_upper()
+		return
+	if slot == "weapon":
+		equipped_loot_weapon_id = int(item.get("id", 0))
+	else:
+		equipped_loot_armor_id = int(item.get("id", 0))
+	_recalculate_derived_stats(true)
+	_refresh_equipment_visuals()
+	_refresh_progression_ui()
+	_save_progress()
+	if profile_panel != null and profile_panel.visible and profile_tab == "EQUIPMENT":
+		_show_profile_tab("EQUIPMENT")
+	if status_label != null:
+		status_label.text = "EQUIPPED %s  •  %s  •  %s" % [str(item.get("rarity", "Common")).to_upper(), str(item.get("name", "GEAR")), _gear_stat_summary(item)]
+
+
 func _roll_enemy_loot(enemy: Node3D) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var gained: Array[String] = []
+	var equipment_drop := _roll_equipment_drop(enemy, rng)
+	if not equipment_drop.is_empty():
+		gained.append("GEAR: %s %s" % [str(equipment_drop.get("rarity", "Common")).to_upper(), str(equipment_drop.get("name", "UNKNOWN"))])
 	if enemy.name == "FrostWarden":
 		inventory["Warden Emblem"] = int(inventory.get("Warden Emblem", 0)) + 2
 		inventory["Frost Sigil"] = int(inventory.get("Frost Sigil", 0)) + 1
@@ -2365,8 +2508,7 @@ func _roll_enemy_loot(enemy: Node3D) -> void:
 			_gain_xp(600)
 			if not codex_discoveries.has("Frost Warden Slain"):
 				codex_discoveries.append("Frost Warden Slain")
-			gained.append("GLACIAL CROWN  •  FIRST KILL RELIC")
-			status_label.text = "FIRST WARDEN SLAIN  •  GLACIAL CROWN +500 COINS +600 XP"
+			gained.append("GLACIAL CROWN • FIRST KILL RELIC")
 	elif enemy.name == "AshWolf":
 		if rng.randf() <= 0.48:
 			inventory["Ashen Pelt"] = int(inventory.get("Ashen Pelt", 0)) + 1
@@ -2384,11 +2526,14 @@ func _roll_enemy_loot(enemy: Node3D) -> void:
 			inventory["Warden Emblem"] = int(inventory.get("Warden Emblem", 0)) + 1
 			gained.append("Warden Emblem")
 	if not gained.is_empty():
-		status_label.text = "LOOT FOUND  •  " + ", ".join(gained)
+		status_label.text = "LOOT FOUND • " + ", ".join(gained)
+		if not equipment_drop.is_empty():
+			status_label.text = "GEAR DROP • %s • %s • %s" % [str(equipment_drop.get("rarity", "Common")).to_upper(), str(equipment_drop.get("name", "UNKNOWN")), _gear_stat_summary(equipment_drop)]
 		if "Echo Fragment" in gained and not codex_discoveries.has("Echoes of Shattered Reach"):
 			codex_discoveries.append("Echoes of Shattered Reach")
-			status_label.text = "CODEX DISCOVERY  •  ECHOES OF SHATTERED REACH"
+			status_label.text = "CODEX DISCOVERY • ECHOES OF SHATTERED REACH"
 	_advance_quest(gained)
+	_refresh_progression_ui()
 	_save_progress()
 
 func _gain_xp(amount: int) -> void:
@@ -2421,38 +2566,39 @@ func _refresh_progression_ui() -> void:
 	if inventory_label != null:
 		var lines: Array[String] = []
 		for item_name in ["Ashen Pelt", "Ancient Shard", "Echo Fragment", "Ruin Core", "Warden Emblem", "Frost Sigil", "Glacial Crown"]:
-			lines.append("%s  × %d" % [item_name, int(inventory.get(item_name, 0))])
+			lines.append("%s × %d" % [item_name, int(inventory.get(item_name, 0))])
+		lines.append("COINS  •  %d" % coins)
 		lines.append("")
-		lines.append("EQUIPMENT")
-		lines.append("Ashen Blade  Lv.%d / 5  •  +%d attack  •  %s" % [weapon_level, weapon_level * 9, _equipment_tier_name(weapon_level, true)])
-		lines.append("Ruin Armor  Lv.%d / 5  •  +%d max HP  •  -%d incoming damage" % [armor_level, armor_level * 18, _armor_mitigation()])
-		lines.append("Armor appearance: %s" % _equipment_tier_name(armor_level, false))
-		lines.append("Combat preview  •  Basic %d  /  Signature %d" % [_basic_attack_damage(), _signature_skill_damage()])
-		lines.append("WEAPON: 3 Shards + 2 Pelts + 35 coins")
-		lines.append("ARMOR: 3 Pelts + 2 Cores + 35 coins")
-		lines.append("ELITE DROP: Warden Emblem  •  25%")
-		lines.append("FROST WARDEN: every 3rd wave  •  650 HP")
-		lines.append("BOSS PHASES: 65% / 30% HP  •  FROST NOVA TELEGRAPH")
-		lines.append("DODGE: leave the cyan danger zone before impact")
-		lines.append("ARMOR reduces Frost Warden damage by up to 12")
-		lines.append("BOSS AI: range-aware combos  •  phase shift grants 1.05s guard")
-		lines.append("SHATTER RING: dodge through the inner safe zone or beyond the outer edge")
-		lines.append("BOSS REWARD: Frost Sigil + 300 coins + 350 XP")
-		lines.append("FIRST KILL: Glacial Crown + 500 coins + 600 XP")
-		lines.append("BOSS ATTACKS: Frost Nova / Ice Lance / Shatter Ring")
-		lines.append("TELEGRAPH COLORS: NOVA CYAN / LANCE AMBER / SHATTER VIOLET")
-		lines.append("ATTACK TELEGRAPH: colored danger zone pulses before impact")
+		lines.append("EQUIPPED")
+		var weapon := _equipped_loot_gear("weapon")
+		var armor := _equipped_loot_gear("armor")
+		lines.append("Ashen Blade R%d  +%d ATK" % [weapon_level, weapon_level * 9])
+		lines.append("%s  %s" % [str(weapon.get("name", "No loot weapon")), _gear_stat_summary(weapon) if not weapon.is_empty() else "No bonus"])
+		lines.append("Ruin Armor R%d  +%d HP  •  -%d DMG" % [armor_level, armor_level * 18, _armor_mitigation()])
+		lines.append("%s  %s" % [str(armor.get("name", "No loot armor")), _gear_stat_summary(armor) if not armor.is_empty() else "No bonus"])
 		lines.append("")
-		lines.append("STORY QUEST")
-		lines.append(_quest_description())
-		lines.append("CODEX DISCOVERIES")
-		if codex_discoveries.is_empty():
-			lines.append("No echoes recorded yet.")
+		lines.append("RECENT DROPS")
+		if loot_gear.is_empty():
+			lines.append("Hunt wolves, stalkers and the Frost Warden.")
 		else:
-			for discovery in codex_discoveries:
-				lines.append("• " + discovery)
+			var start_index := maxi(0, loot_gear.size() - 3)
+			for item_index in range(start_index, loot_gear.size()):
+				var item: Dictionary = loot_gear[item_index]
+				var equipped_id := equipped_loot_weapon_id if str(item.get("slot", "")) == "weapon" else equipped_loot_armor_id
+				lines.append("%s%s %s • %s" % ["★ " if int(item.get("id", 0)) == equipped_id else "", str(item.get("rarity", "Common")).to_upper(), str(item.get("name", "Unknown gear")), _gear_stat_summary(item)])
+		lines.append("")
+		lines.append("FORGE: 3 Shards + 2 Pelts + 35 coins")
+		lines.append("ARMOR: 3 Pelts + 2 Cores + 35 coins")
+		lines.append(_quest_description())
 		inventory_label.text = "\n".join(lines)
-
+	if loot_weapon_button != null:
+		var best_weapon := _best_loot_item("weapon")
+		loot_weapon_button.text = "EQUIP BEST WEAPON  •  %s" % str(best_weapon.get("name", "NONE FOUND"))
+		loot_weapon_button.disabled = best_weapon.is_empty() or int(best_weapon.get("id", 0)) == equipped_loot_weapon_id
+	if loot_armor_button != null:
+		var best_armor := _best_loot_item("armor")
+		loot_armor_button.text = "EQUIP BEST ARMOR  •  %s" % str(best_armor.get("name", "NONE FOUND"))
+		loot_armor_button.disabled = best_armor.is_empty() or int(best_armor.get("id", 0)) == equipped_loot_armor_id
 
 func _craft_weapon() -> void:
 	if weapon_level >= 5:
@@ -2555,6 +2701,10 @@ func _save_progress() -> void:
 	save.set_value("inventory", "items", inventory)
 	save.set_value("equipment", "weapon_level", weapon_level)
 	save.set_value("equipment", "armor_level", armor_level)
+	save.set_value("equipment", "loot_gear", loot_gear)
+	save.set_value("equipment", "equipped_loot_weapon_id", equipped_loot_weapon_id)
+	save.set_value("equipment", "equipped_loot_armor_id", equipped_loot_armor_id)
+	save.set_value("equipment", "next_loot_gear_id", next_loot_gear_id)
 	save.set_value("quest", "stage", quest_stage)
 	save.set_value("quest", "progress", quest_stage_progress)
 	save.set_value("quest", "completed", quest_completed)
@@ -2588,6 +2738,14 @@ func _load_progress() -> void:
 			inventory[item_name] = int(saved_inventory.get(item_name, inventory[item_name]))
 	weapon_level = clampi(int(save.get_value("equipment", "weapon_level", weapon_level)), 0, 5)
 	armor_level = clampi(int(save.get_value("equipment", "armor_level", armor_level)), 0, 5)
+	var saved_loot: Variant = save.get_value("equipment", "loot_gear", [])
+	if saved_loot is Array:
+		for saved_item in saved_loot:
+			if saved_item is Dictionary and str(saved_item.get("slot", "")) in ["weapon", "armor"]:
+				loot_gear.append(saved_item.duplicate(true))
+	equipped_loot_weapon_id = int(save.get_value("equipment", "equipped_loot_weapon_id", 0))
+	equipped_loot_armor_id = int(save.get_value("equipment", "equipped_loot_armor_id", 0))
+	next_loot_gear_id = maxi(1, int(save.get_value("equipment", "next_loot_gear_id", 1)))
 	quest_stage = clampi(int(save.get_value("quest", "stage", quest_stage)), 0, 4)
 	quest_stage_progress = maxi(0, int(save.get_value("quest", "progress", quest_stage_progress)))
 	quest_completed = bool(save.get_value("quest", "completed", quest_completed))
