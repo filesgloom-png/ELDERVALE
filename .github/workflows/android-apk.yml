@@ -83,6 +83,9 @@ jobs:
             exit 1
           fi
 
+      - name: Test equipment save/load round-trip
+        run: godot --headless --path . --script scripts/gear_save_roundtrip_test.gd
+
       - name: Export Android ARM64 debug APK
         run: |
           mkdir -p build
